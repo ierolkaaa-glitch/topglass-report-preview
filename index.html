@@ -248,6 +248,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div class="card">
         <h2>Инсайты: где продаётся заметно больше/меньше</h2>
+        <p class="muted" style="margin-top:-6px;">Точки сравниваются только внутри своей группы (Группа А между собой, Группа Б между собой).</p>
         <div class="slider-row">
           <label style="width:230px;">Мин. разница в разах: <b id="ratio-val">1.5</b>×</label>
           <input type="range" id="ratio-slider" min="1.1" max="5" step="0.1" value="1.5">
@@ -256,7 +257,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <label style="width:230px;">Мин. разница в штуках: <b id="diff-val">5</b> шт</label>
           <input type="range" id="diff-slider" min="1" max="50" step="1" value="5">
         </div>
-        <div id="insights-list" style="margin-top:14px;"></div>
+        <h3>Группа А: ШР, АЦ, КС, ЖГ</h3>
+        <div id="insights-list-a" style="margin-top:6px;"></div>
+        <h3>Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ</h3>
+        <div id="insights-list-b" style="margin-top:6px;"></div>
       </div>
     </section>
 
@@ -1018,13 +1022,8 @@ function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
   }
 }
 
-function renderInsightsList(){
-  if (!currentInsightsData) return;
-  const rec = currentInsightsData;
-  const pointsWithData = POINTS.filter(p=>rec.points[p]);
-  const ratioThresh = parseFloat(document.getElementById("ratio-slider").value);
-  const diffThresh = parseFloat(document.getElementById("diff-slider").value);
-
+function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
+  const pointsWithData = groupPoints.filter(p=>rec.points[p]);
   const byName = {};
   for (const p of pointsWithData){
     for (const it of rec.points[p]){
@@ -1033,7 +1032,6 @@ function renderInsightsList(){
       byName[it.name][p] = (byName[it.name][p]||0) + it.qty;
     }
   }
-
   const insights = [];
   for (const [name, vals] of Object.entries(byName)){
     const full = {}; pointsWithData.forEach(p=>full[p]=vals[p]||0);
@@ -1049,14 +1047,28 @@ function renderInsightsList(){
     }
   }
   insights.sort((a,b)=>b.diff-a.diff);
-  const top = insights.slice(0,25);
+  return insights.slice(0,25);
+}
 
-  const list = document.getElementById("insights-list");
+function renderInsightsGroupList(containerId, top){
+  const list = document.getElementById(containerId);
   if (top.length===0){ list.innerHTML = `<p class="muted">Заметных расхождений при текущих порогах не найдено.</p>`; return; }
   list.innerHTML = top.map(ins=>{
     const ratioTxt = ins.ratio===Infinity ? `только в ${ins.maxP[0]}` : `в ${ins.ratio.toFixed(1)}× больше`;
     return `<div class="insight-item"><b>«${ins.name}»</b>: ${ins.maxP[0]} — ${fmt(ins.maxP[1])} шт, ${ins.minP[0]} — ${fmt(ins.minP[1])} шт <span class="badge">${ratioTxt}</span></div>`;
   }).join("");
+}
+
+function renderInsightsList(){
+  if (!currentInsightsData) return;
+  const rec = currentInsightsData;
+  const ratioThresh = parseFloat(document.getElementById("ratio-slider").value);
+  const diffThresh = parseFloat(document.getElementById("diff-slider").value);
+
+  const topA = computeGroupInsights(rec, POINT_GROUPS["Группа А"], ratioThresh, diffThresh);
+  const topB = computeGroupInsights(rec, POINT_GROUPS["Группа Б"], ratioThresh, diffThresh);
+  renderInsightsGroupList("insights-list-a", topA);
+  renderInsightsGroupList("insights-list-b", topB);
 }
 
 /* ============ РЕЗЕРВНАЯ КОПИЯ ============ */
