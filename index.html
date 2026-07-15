@@ -239,8 +239,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="chart-wrap" style="height:340px;"><canvas id="chart-cat-compare"></canvas></div>
       </div>
       <div class="card">
-        <h2>Группа А (ШР, АЦ, КС, ЖГ) vs Группа Б (ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ)</h2>
-        <div class="chart-wrap" style="height:340px;"><canvas id="chart-group-compare"></canvas></div>
+        <h2>Группа А: ШР, АЦ, КС, ЖГ (между собой)</h2>
+        <div class="chart-wrap" style="height:340px;"><canvas id="chart-group-a"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ (между собой)</h2>
+        <div class="chart-wrap" style="height:340px;"><canvas id="chart-group-b"></canvas></div>
       </div>
       <div class="card">
         <h2>Инсайты: где продаётся заметно больше/меньше</h2>
@@ -964,7 +968,8 @@ async function loadInsightsTab(){
   const rec = await localGetMonth(month);
   currentInsightsData = rec;
   renderCatCompareChart(rec);
-  renderGroupCompareChart(rec);
+  renderGroupChart(rec, POINT_GROUPS["Группа А"], "chart-group-a", "groupAChart");
+  renderGroupChart(rec, POINT_GROUPS["Группа Б"], "chart-group-b", "groupBChart");
   renderInsightsList();
 }
 
@@ -982,30 +987,35 @@ function renderCatCompareChart(rec){
   });
 }
 
-// Группа А и Группа Б — фиксированные объединения точек для сравнения между собой.
+// Группа А и Группа Б — фиксированные объединения точек. Точки внутри каждой группы
+// сравниваются между собой (а не группа с группой).
 const POINT_GROUPS = {
   "Группа А": ["ШР","АЦ","КС","ЖГ"],
   "Группа Б": ["ХБК","ВОКЗ/ЖД","ОРАЛ","ХРОМ"],
 };
-const GROUP_COLORS = { "Группа А": "#4472C4", "Группа Б": "#ED7D31" };
-let groupCompareChart = null;
-function renderGroupCompareChart(rec){
-  const datasets = Object.entries(POINT_GROUPS).map(([groupName, groupPoints])=>{
-    const groupAgg = {};
-    CAT_ORDER.forEach(c=>groupAgg[c]=0);
-    groupPoints.forEach(p=>{
-      if (!rec.points[p]) return;
-      const agg = aggregateByCategory(rec.points[p].filter(it=>CAT_ORDER.includes(it.cat)));
-      CAT_ORDER.forEach(c=>{ if (agg[c]) groupAgg[c] += agg[c].profit; });
+let groupAChart = null;
+let groupBChart = null;
+function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
+  const pointsWithData = groupPoints.filter(p=>rec.points[p]);
+  const datasets = pointsWithData.map((p,i)=>{
+    const agg = aggregateByCategory(rec.points[p].filter(it=>CAT_ORDER.includes(it.cat)));
+    return { label:p, data: CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+  });
+  if (chartVarName === "groupAChart"){
+    if (groupAChart) groupAChart.destroy();
+    groupAChart = new Chart(document.getElementById(canvasId), {
+      type:"bar",
+      data:{ labels: CAT_ORDER, datasets },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
     });
-    return { label: groupName, data: CAT_ORDER.map(c=>groupAgg[c]), backgroundColor: GROUP_COLORS[groupName] };
-  });
-  if (groupCompareChart) groupCompareChart.destroy();
-  groupCompareChart = new Chart(document.getElementById("chart-group-compare"), {
-    type:"bar",
-    data:{ labels: CAT_ORDER, datasets },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
-  });
+  } else {
+    if (groupBChart) groupBChart.destroy();
+    groupBChart = new Chart(document.getElementById(canvasId), {
+      type:"bar",
+      data:{ labels: CAT_ORDER, datasets },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
+    });
+  }
 }
 
 function renderInsightsList(){
