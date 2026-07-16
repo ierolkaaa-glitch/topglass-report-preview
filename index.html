@@ -241,7 +241,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="card">
         <h2>Соотношение стёкол и чехлов</h2>
         <p class="muted" id="glass-case-summary" style="margin-top:-6px;"></p>
-        <div class="chart-wrap" style="height:340px;"><canvas id="chart-glass-case"></canvas></div>
+        <div class="grid2">
+          <div><h3>Штук</h3><div class="chart-wrap" style="height:320px;"><canvas id="chart-glass-case"></canvas></div></div>
+          <div><h3>Прибыль, ₸</h3><div class="chart-wrap" style="height:320px;"><canvas id="chart-glass-case-profit"></canvas></div></div>
+        </div>
       </div>
       <div class="card">
         <h2>Группа А: ШР, АЦ, КС, ЖГ (между собой)</h2>
@@ -1032,29 +1035,44 @@ function renderCatCompareChart(rec){
 }
 
 // Стёкла для этого соотношения — все категории стекла КРОМЕ Гидрогеля (Skin и линзы на
-// камеры сюда изначально не входят, см. GLASS_RATIO_CATS). Чехлы — категория "ЧЕХЛЫ".
+// камеры сюда изначально не входят, см. GLASS_RATIO_CATS). Чехлы — категория "ЧЕХЛЫ", все
+// подвиды чехлов (книжка, на смартфон и т.д.) считаются одной общей категорией "Чехлы".
 let glassCaseChart = null;
+let glassCaseProfitChart = null;
 function renderGlassCaseChart(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
-  const glassData = [], caseData = [];
-  let totalGlass = 0, totalCases = 0;
+  const glassQtyData = [], caseQtyData = [], glassProfitData = [], caseProfitData = [];
+  let totalGlassQty = 0, totalCaseQty = 0, totalGlassProfit = 0, totalCaseProfit = 0;
   pointsWithData.forEach(p=>{
     const items = rec.points[p];
-    const glassQty = items.filter(it=>GLASS_RATIO_CATS.includes(it.cat)).reduce((s,it)=>s+it.qty,0);
-    const caseQty = items.filter(it=>it.cat==="ЧЕХЛЫ").reduce((s,it)=>s+it.qty,0);
-    glassData.push(glassQty);
-    caseData.push(caseQty);
-    totalGlass += glassQty;
-    totalCases += caseQty;
+    const glassItems = items.filter(it=>GLASS_RATIO_CATS.includes(it.cat));
+    const caseItems = items.filter(it=>it.cat==="ЧЕХЛЫ");
+    const glassQty = glassItems.reduce((s,it)=>s+it.qty,0);
+    const caseQty = caseItems.reduce((s,it)=>s+it.qty,0);
+    const glassProfit = glassItems.reduce((s,it)=>s+it.profit,0);
+    const caseProfit = caseItems.reduce((s,it)=>s+it.profit,0);
+    glassQtyData.push(glassQty); caseQtyData.push(caseQty);
+    glassProfitData.push(glassProfit); caseProfitData.push(caseProfit);
+    totalGlassQty += glassQty; totalCaseQty += caseQty;
+    totalGlassProfit += glassProfit; totalCaseProfit += caseProfit;
   });
   const summaryEl = document.getElementById("glass-case-summary");
-  if (summaryEl) summaryEl.textContent = `Всего по сети: ${fmt(totalGlass)} шт стёкол — ${fmt(totalCases)} шт чехлов`;
+  if (summaryEl) summaryEl.textContent = `Всего по сети: ${fmt(totalGlassQty)} шт стёкол (${fmt(totalGlassProfit)} ₸) — ${fmt(totalCaseQty)} шт чехлов (${fmt(totalCaseProfit)} ₸)`;
   if (glassCaseChart) glassCaseChart.destroy();
   glassCaseChart = new Chart(document.getElementById("chart-glass-case"), {
     type:"bar",
     data:{ labels: pointsWithData, datasets:[
-      { label:"Стёкла", data: glassData, backgroundColor:"#4472C4" },
-      { label:"Чехлы", data: caseData, backgroundColor:"#ED7D31" },
+      { label:"Стёкла", data: glassQtyData, backgroundColor:"#4472C4" },
+      { label:"Чехлы", data: caseQtyData, backgroundColor:"#ED7D31" },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
+  });
+  if (glassCaseProfitChart) glassCaseProfitChart.destroy();
+  glassCaseProfitChart = new Chart(document.getElementById("chart-glass-case-profit"), {
+    type:"bar",
+    data:{ labels: pointsWithData, datasets:[
+      { label:"Стёкла", data: glassProfitData, backgroundColor:"#4472C4" },
+      { label:"Чехлы", data: caseProfitData, backgroundColor:"#ED7D31" },
     ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
   });
