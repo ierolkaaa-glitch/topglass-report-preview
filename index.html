@@ -341,6 +341,10 @@ const GLASS_RATIO_CATS = CAT_ORDER.filter(c=>c!=="Гидрогель");
 // вместо редких "Матовое стекло" и "Другое стекло" показываем итоговую прибыль по чехлам
 // и по всем остальным товарам одной суммой — это то, что реально интересно в этом отчёте.
 const REPORT_CAT_ORDER = ["5D","6D","18D","Приват","Приват по 270","Стекло по 1500/1490","Гидрогель","ЧЕХЛЫ","ТОВАРЫ"];
+// Список категорий для графиков вкладки "Сравнение точек и инсайты" (категории стекла по
+// точкам, Группа А, Группа Б) — редкие "Матовое стекло" и "Другое стекло" здесь не нужны,
+// но на "Соотношение стёкол и чехлов" (GLASS_RATIO_CATS, считается от CAT_ORDER) это не влияет.
+const INSIGHTS_CAT_ORDER = CAT_ORDER.filter(c=>c!=="Матовое стекло" && c!=="Другое стекло");
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -1051,13 +1055,13 @@ async function loadInsightsTab(){
 function renderCatCompareChart(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByCategory(rec.points[p].filter(it=>CAT_ORDER.includes(it.cat)));
-    return { label:p, data: CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    const agg = aggregateByCategory(rec.points[p].filter(it=>INSIGHTS_CAT_ORDER.includes(it.cat)));
+    return { label:p, data: INSIGHTS_CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (catCompareChart) catCompareChart.destroy();
   catCompareChart = new Chart(document.getElementById("chart-cat-compare"), {
     type:"bar",
-    data:{ labels: CAT_ORDER, datasets },
+    data:{ labels: INSIGHTS_CAT_ORDER, datasets },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
   });
 }
@@ -1117,21 +1121,21 @@ let groupBChart = null;
 function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
   const pointsWithData = groupPoints.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByCategory(rec.points[p].filter(it=>CAT_ORDER.includes(it.cat)));
-    return { label:p, data: CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    const agg = aggregateByCategory(rec.points[p].filter(it=>INSIGHTS_CAT_ORDER.includes(it.cat)));
+    return { label:p, data: INSIGHTS_CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (chartVarName === "groupAChart"){
     if (groupAChart) groupAChart.destroy();
     groupAChart = new Chart(document.getElementById(canvasId), {
       type:"bar",
-      data:{ labels: CAT_ORDER, datasets },
+      data:{ labels: INSIGHTS_CAT_ORDER, datasets },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
     });
   } else {
     if (groupBChart) groupBChart.destroy();
     groupBChart = new Chart(document.getElementById(canvasId), {
       type:"bar",
-      data:{ labels: CAT_ORDER, datasets },
+      data:{ labels: INSIGHTS_CAT_ORDER, datasets },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
     });
   }
