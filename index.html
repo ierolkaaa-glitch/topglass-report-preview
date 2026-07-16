@@ -858,10 +858,8 @@ function renderReport(rec){
   const networkCard = document.createElement("div");
   networkCard.className = "card";
   networkCard.innerHTML = `<h2>Сеть в целом — ${rec.monthLabel}</h2>
-    <div class="grid2">
-      <div><h3>Прибыль по категориям</h3><div class="chart-wrap"><canvas id="net-profit-chart"></canvas></div></div>
-      <div><h3>Продажи, шт по категориям</h3><div class="chart-wrap"><canvas id="net-qty-chart"></canvas></div></div>
-    </div>`;
+    <h3>Прибыль и продажи по категориям</h3>
+    <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>`;
   content.appendChild(networkCard);
 
   const netAgg = {};
@@ -871,8 +869,10 @@ function renderReport(rec){
     for (const c of REPORT_CAT_ORDER){ if (agg[c]){ netAgg[c].qty += agg[c].qty; netAgg[c].profit += agg[c].profit; } }
   }
   const sortedNetCats = [...REPORT_CAT_ORDER].sort((a,b)=>netAgg[b].profit-netAgg[a].profit);
-  reportCharts.push(makeBarChart("net-profit-chart", sortedNetCats, [{label:"Прибыль, ₸", data: sortedNetCats.map(c=>netAgg[c].profit), color:"#4472C4"}]));
-  reportCharts.push(makeBarChart("net-qty-chart", sortedNetCats, [{label:"Шт", data: sortedNetCats.map(c=>netAgg[c].qty), color:"#70AD47"}]));
+  reportCharts.push(makeCombinedNetChart("net-combined-chart", sortedNetCats,
+    sortedNetCats.map(c=>netAgg[c].profit),
+    sortedNetCats.map(c=>netAgg[c].qty)
+  ));
 
   pointsWithData.forEach((p, i)=>{
     const items = rec.points[p];
@@ -936,6 +936,31 @@ function makeBarChart(canvasId, labels, datasets){
   });
 }
 
+// Комбинированный график "Сеть в целом" — прибыль и штуки по категориям в одном графике
+// для прямого сравнения, каждый показатель на своей шкале (иначе штуки не видно рядом с ₸).
+function makeCombinedNetChart(canvasId, labels, profitData, qtyData){
+  const ctx = document.getElementById(canvasId);
+  return new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        { label:"Прибыль, ₸", data: profitData, backgroundColor:"#4472C4", yAxisID:"y" },
+        { label:"Шт", data: qtyData, backgroundColor:"#70AD47", yAxisID:"y1" },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true}, title:{display:false}, tooltip:{enabled:true} },
+      scales:{
+        x:{ticks:{font:{size:10}}},
+        y:{ position:"left", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Прибыль, ₸"} },
+        y1:{ position:"right", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Шт"} },
+      }
+    }
+  });
+}
+
 /* ============ ЭКСПОРТ В EXCEL ============ */
 // Вставляет картинку графика (снимок уже отрисованного Chart.js) в лист рядом с таблицей.
 function addChartImageToSheet(wb, ws, chart, colIdx, rowIdx){
@@ -966,9 +991,8 @@ async function exportReportExcel(){
   wsSummary.columns = [{width:24},{width:12},{width:14}];
   wsSummary.addRow(["Категория","Шт","Прибыль, ₸"]);
   sortedNet.forEach(c=>wsSummary.addRow([c, netAgg[c].qty, netAgg[c].profit]));
-  // reportCharts[0] = график прибыли по сети, reportCharts[1] = график шт по сети
+  // reportCharts[0] = совмещённый график прибыли и штук по сети
   addChartImageToSheet(wb, wsSummary, reportCharts[0], 4, 0);
-  addChartImageToSheet(wb, wsSummary, reportCharts[1], 4, 13);
 
   pointsWithData.forEach((p, i)=>{
     const items = rec.points[p];
@@ -991,8 +1015,8 @@ async function exportReportExcel(){
     ws.addRow(["ТОВАРЫ — ТОП-5 ПО ПРИБЫЛИ"]); ws.addRow(["#","Товар","Прибыль, ₸"]);
     top5Profit.forEach((r,idx)=>ws.addRow([idx+1, r.name, r.profit]));
 
-    // reportCharts[2+i] = график категорий стекла для этой точки (в том же порядке, что и на экране)
-    addChartImageToSheet(wb, ws, reportCharts[2+i], 4, 0);
+    // reportCharts[1+i] = график категорий для этой точки (в том же порядке, что и на экране)
+    addChartImageToSheet(wb, ws, reportCharts[1+i], 4, 0);
   });
 
   const buf = await wb.xlsx.writeBuffer();
