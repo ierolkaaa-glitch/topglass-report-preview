@@ -273,12 +273,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <section class="tab-panel" id="tab-backup">
       <div class="card">
         <h2>Резервная копия</h2>
-        <p class="muted">Данные хранятся прямо в этом браузере на этом компьютере (офлайн, без сервера). Если очистить историю браузера или открыть программу с другого компьютера, данных там не будет — периодически скачивайте резервную копию и держите её в надёжном месте.</p>
+        <p class="muted">Данные хранятся в общем облаке (Firebase), а не в этом браузере. Тем не менее стоит
+        периодически скачивать резервную копию и держать её в надёжном месте — на случай ошибки при загрузке.</p>
         <div class="row">
           <button class="btn" id="backup-download-btn">Скачать резервную копию</button>
         </div>
         <h3>Восстановить из копии</h3>
         <input type="file" id="backup-restore-input" accept=".json">
+      </div>
+      <div class="card">
+        <h2>Пересчитать категории товаров</h2>
+        <p class="muted">Классификация товаров по категориям (чехлы, гидрогель и т.д.) была улучшена — теперь
+        она использует точный справочник названий вместо простого поиска слов в названии. Уже загруженные
+        ранее месяцы остались с прежней, менее точной классификацией. Нажмите кнопку ниже, чтобы пересчитать
+        категории во всех загруженных месяцах по новым правилам (это не удаляет и не меняет сами цифры продаж —
+        только категорию каждого товара). Рекомендуется сделать резервную копию перед пересчётом.</p>
+        <div class="row">
+          <button class="btn" id="recalc-categories-btn">Пересчитать категории во всех месяцах</button>
+        </div>
+        <p class="muted" id="recalc-status" style="margin-top:8px;"></p>
       </div>
     </section>
 
@@ -1148,10 +1161,64 @@ document.getElementById("backup-restore-input").addEventListener("change", async
     if (!confirm("Восстановить данные из этого файла? Текущие данные в этом браузере будут дополнены/перезаписаны.")) return;
     await localRestoreBackup(data);
     toast("Данные восстановлены");
-    monthlyRecordsCache = {};
     refreshMonthsEverywhere();
   }catch(err){ toast("Ошибка восстановления: "+err.message); }
   e.target.value = "";
+});
+
+/* ============ ПЕРЕСЧЁТ КАТЕГОРИЙ ============ */
+// Пересчитывает поле "cat" у каждого товара во всех загруженных месяцах текущей функцией
+// classify() (используется, когда classify() был улучшен уже после того, как данные были
+// загружены — сами цифры продаж не трогаются, меняется только категория).
+async function recalculateAllCategories(onProgress){
+  const snap = await db.collection("points").get();
+  let batch = db.batch();
+  let opCount = 0;
+  let changedDocs = 0;
+  let totalDocs = 0;
+  for (const doc of snap.docs){
+    totalDocs++;
+    const d = doc.data();
+    const items = d.items || [];
+    let changed = false;
+    const newItems = items.map(it=>{
+      const newCat = classify(it.name);
+      if (newCat !== it.cat) changed = true;
+      return Object.assign({}, it, {cat: newCat});
+    });
+    if (changed){
+      batch.update(doc.ref, { items: newItems });
+      changedDocs++;
+      opCount++;
+      if (opCount >= 450){
+        await batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
+    }
+    if (onProgress) onProgress(totalDocs, snap.docs.length);
+  }
+  if (opCount > 0) await batch.commit();
+  return { totalDocs, changedDocs };
+}
+
+document.getElementById("recalc-categories-btn").addEventListener("click", async ()=>{
+  if (!confirm("Пересчитать категории товаров во всех загруженных месяцах по новым правилам? Рекомендуется заранее скачать резервную копию.")) return;
+  const statusEl = document.getElementById("recalc-status");
+  const btn = document.getElementById("recalc-categories-btn");
+  btn.disabled = true;
+  try{
+    statusEl.textContent = "Идёт пересчёт...";
+    const result = await recalculateAllCategories((done,total)=>{
+      statusEl.textContent = `Идёт пересчёт... ${done} из ${total}`;
+    });
+    statusEl.textContent = `Готово: обработано ${result.totalDocs} записей, обновлено ${result.changedDocs}.`;
+    toast("Категории пересчитаны");
+  }catch(e){
+    statusEl.textContent = "Ошибка: " + e.message;
+    toast("Ошибка пересчёта: " + e.message);
+  }
+  btn.disabled = false;
 });
 
 /* ============ ПАРОЛЬ ДОСТУПА ============ */
