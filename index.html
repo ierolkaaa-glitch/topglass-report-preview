@@ -267,8 +267,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <input type="range" id="ratio-slider" min="1.1" max="5" step="0.1" value="1.5">
         </div>
         <div class="slider-row">
-          <label style="width:230px;">Мин. разница в штуках: <b id="diff-val">5</b> шт</label>
-          <input type="range" id="diff-slider" min="1" max="50" step="1" value="5">
+          <label style="width:230px;">Мин. разница в штуках: <b id="diff-val">30</b> шт</label>
+          <input type="range" id="diff-slider" min="20" max="150" step="1" value="30">
         </div>
         <h3>Группа А: ШР, АЦ, КС, ЖГ</h3>
         <div id="insights-list-a" style="margin-top:6px;"></div>
@@ -1374,18 +1374,39 @@ function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
   }
 }
 
+// Категории для поиска заметных расхождений между точками — своя, более крупная
+// группировка специально для инсайтов (не путать с категориями отчёта): всё стекло
+// (кроме гидрогеля) объединено в одну "Стекло", Гидрогель — отдельно (включая гидрогель
+// для планшетов/часов/камеры — все они уже определяются как "Гидрогель" в справочнике),
+// "Адаптеры" — отдельная категория только здесь (в отчёте за месяц остаётся "Другие"),
+// Чехлы не сравниваем — для них есть отдельный блок "Соотношение стёкол и чехлов".
+const INSIGHTS_STECLO_CATS = new Set([...GLASS_SUBCATS, "Другое стекло", "Матовое стекло", "Линза на камеры", "Skin"]);
+INSIGHTS_STECLO_CATS.delete("Гидрогель");
+function insightsCategoryOf(it){
+  if (it.cat === "ЧЕХЛЫ") return null;
+  if (it.cat === "Гидрогель") return "Гидрогель";
+  if (INSIGHTS_STECLO_CATS.has(it.cat)) return "Стекло";
+  if (it.cat === "ТОВАРЫ"){
+    const sub = classifyGoods(it.name);
+    if (sub === "Другие" && normalizeItemName(it.name).includes("адаптер")) return "Адаптеры";
+    return sub;
+  }
+  return null;
+}
+
 function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
   const pointsWithData = groupPoints.filter(p=>rec.points[p]);
-  const byName = {};
+  const byCat = {};
   for (const p of pointsWithData){
     for (const it of rec.points[p]){
-      if (it.cat === "ЧЕХЛЫ") continue;
-      if (!byName[it.name]) byName[it.name] = {};
-      byName[it.name][p] = (byName[it.name][p]||0) + it.qty;
+      const cat = insightsCategoryOf(it);
+      if (!cat) continue;
+      if (!byCat[cat]) byCat[cat] = {};
+      byCat[cat][p] = (byCat[cat][p]||0) + it.qty;
     }
   }
   const insights = [];
-  for (const [name, vals] of Object.entries(byName)){
+  for (const [name, vals] of Object.entries(byCat)){
     const full = {}; pointsWithData.forEach(p=>full[p]=vals[p]||0);
     const entries = Object.entries(full);
     if (entries.length < 2) continue;
@@ -1399,7 +1420,7 @@ function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
     }
   }
   insights.sort((a,b)=>b.diff-a.diff);
-  return insights.slice(0,25);
+  return insights;
 }
 
 function renderInsightsGroupList(containerId, top){
@@ -1407,7 +1428,7 @@ function renderInsightsGroupList(containerId, top){
   if (top.length===0){ list.innerHTML = `<p class="muted">Заметных расхождений при текущих порогах не найдено.</p>`; return; }
   list.innerHTML = top.map(ins=>{
     const ratioTxt = ins.ratio===Infinity ? `только в ${ins.maxP[0]}` : `в ${ins.ratio.toFixed(1)}× больше`;
-    return `<div class="insight-item"><b>«${ins.name}»</b>: ${ins.maxP[0]} — ${fmt(ins.maxP[1])} шт, ${ins.minP[0]} — ${fmt(ins.minP[1])} шт <span class="badge">${ratioTxt}</span></div>`;
+    return `<div class="insight-item"><b>${ins.name}</b>: ${ins.maxP[0]} — ${fmt(ins.maxP[1])} шт, ${ins.minP[0]} — ${fmt(ins.minP[1])} шт <span class="badge">${ratioTxt}</span></div>`;
   }).join("");
 }
 
@@ -1422,6 +1443,7 @@ function renderInsightsList(){
   renderInsightsGroupList("insights-list-a", topA);
   renderInsightsGroupList("insights-list-b", topB);
 }
+
 
 /* ============ РЕЗЕРВНАЯ КОПИЯ ============ */
 document.getElementById("backup-download-btn").addEventListener("click", async ()=>{
