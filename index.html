@@ -161,6 +161,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .slider-row input[type=range]{flex:1;}
   .toast{position:fixed; bottom:20px; right:20px; background:#1f2937; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:999;}
   .toast.show{opacity:1;}
+  .btn-link{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:6px 0; text-decoration:underline;}
+  .btn-link:hover{color:var(--accent-light);}
+  .detail-panel{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);}
+  .detail-panel h4{font-size:12px; margin:0 0 6px; color:var(--muted);}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px;}
 </style>
 </head>
 <body>
@@ -345,6 +350,19 @@ const REPORT_CAT_ORDER = ["5D","6D","18D","Приват","Приват по 270"
 // точкам, Группа А, Группа Б) — редкие "Матовое стекло" и "Другое стекло" здесь не нужны,
 // но на "Соотношение стёкол и чехлов" (GLASS_RATIO_CATS, считается от CAT_ORDER) это не влияет.
 const INSIGHTS_CAT_ORDER = CAT_ORDER.filter(c=>c!=="Матовое стекло" && c!=="Другое стекло");
+// Подкатегории стекла, из которых складывается объединённый столбец "Стекло" в отчёте за
+// месяц — сами по себе не показываются отдельными столбцами, но видны как цветные сегменты
+// внутри столбца "Стекло" (и в развороте "Подробнее").
+const GLASS_SUBCATS = REPORT_CAT_ORDER.filter(c=>c!=="ЧЕХЛЫ" && c!=="ТОВАРЫ");
+const GLASS_SUBCAT_COLORS = {
+  "5D":"#4472C4", "6D":"#ED7D31", "18D":"#A5A5A5", "Приват":"#FFC000",
+  "Приват по 270":"#5B9BD5", "Стекло по 1500/1490":"#70AD47", "Гидрогель":"#264478"
+};
+const CASE_COLOR = "#9E480E";
+const GOODS_COLOR = "#636363";
+// Подкатегории "Товаров" (всё, что не стекло и не чехлы) — только для отчёта за месяц.
+const GOODS_SUBCATS = ["Наушники","Зарядки","USB","Другие"];
+const GOODS_SUBCAT_COLORS = { "Наушники":"#4472C4", "Зарядки":"#ED7D31", "USB":"#A5A5A5", "Другие":"#FFC000" };
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -386,6 +404,22 @@ function classify(name){
   if (n.includes("линза")) return "Линза на камеры";
   if (n.includes("чехол") || n.includes("чехл")) return "ЧЕХЛЫ";
   return "ТОВАРЫ";
+}
+
+// Справочник "Название товара -> подкатегория" для товаров (не стекло, не чехлы), собранный
+// из категорий "Наушники"/"Беспроводные наушники", "Зарядные устройства", "USB" в файле
+// Наименование-Категория.xlsx. Не найденные по справочнику товары определяются по ключевым
+// словам в названии, а если и это не помогло — попадают в "Другие".
+const GOODS_SUBCAT_MAP = {"aipods по 3900":"Наушники","usb по 300":"USB","usb cable orig":"USB","usb type-c to type-c 1190":"USB","usb-c to lighting 2890":"USB","usb type-c foneng x115":"USB","usb-c to lightning по 1190":"USB","зарядное устройство xa-46":"Зарядки","usb t291 c/c":"USB","зу foneng eu46":"Зарядки","usb type-c to type-c 2890":"USB","зу foneng eu72":"Зарядки","usb ts-141 c/c":"USB","usb по 400":"USB","зу ch0111 c/c":"Зарядки","зу foneng eu39":"Зарядки","зу ch0341 c/c":"Зарядки","наушники по 300":"Наушники","usb type-c to type-c 6600":"USB","usb type-c to type-c 890":"USB","наушники lighting foneng t28":"Наушники","зу ch6031 c/c":"Зарядки","зу ch5211 c/c":"Зарядки","наушники 1790":"Наушники","usb-c to lighting 890":"USB","наушники type-c foneng t36":"Наушники","usb ts-033 a/c":"USB","foneng usb type-c to type-c x115":"USB","наушники borofone bm73":"Наушники","usb type-c foneng x119":"USB","airpods 3-9490":"Наушники","airpods pro 2-9490":"Наушники","airpods 4-9490":"Наушники","usb x213 iphone":"USB","usb mletube micro/type/lihgtning":"USB","usb wuw 213 micro":"USB","airpods pro 2-6890":"Наушники","amaya e57s":"Зарядки","airpods 3-6890":"Наушники","зарядное устройство ga-39 type-c/lightning":"Зарядки","usb type-c &ip":"USB","usb samsung type-c to type-c":"USB","зу ch102 a/l":"Зарядки","airpods 4-6890":"Наушники","зу wuw t82 type-c":"Зарядки","usb wuw x195":"USB","usb type-c to type-c foneng x121 orange":"USB","usb wuw x192 lighting":"USB","наушники p9":"Наушники","usb xp-53":"USB","usb c68 iphone":"USB","usb type-c to type-c foneng x121 white":"USB","зу wuw t82 micro":"Зарядки","зу wuw t55 micro":"Зарядки","зу wuw t55 lighting":"Зарядки","зу wuw t55 type-c":"Зарядки","зу ch6031 c/l":"Зарядки","наушники dg по 1000":"Наушники","usb 2в1":"USB","зу u010 iphone":"Зарядки","usb c33 iphone":"USB","зарядное устройство gerlax ga-26":"Зарядки","usb d58t":"USB","зу u016 type-c":"Зарядки","зу u015 type-c":"Зарядки","usb otg":"USB","airpods pro по 6900":"Наушники","usb hoco u133":"USB","usb ts-033 a/l":"USB","usb x21":"USB","наушники led ms-b4":"Наушники","usb d07l":"USB","usb по 500":"USB","samsung адаптер 45w":"Зарядки","usb магнит micro ip,type c m3":"USB","usb d07v":"USB","зу u010 type-c":"Зарядки","usb hoco x90":"USB","usb wuw x192 micro/type":"USB","зу type-c amaya e59s":"Зарядки","usb d42l":"USB","u016 iphone":"Зарядки","зарядка по 600":"Зарядки","зу u014 type-c":"Зарядки","usb магнитный mx-cb37":"USB","наушники wuw r162":"Наушники","наушники на шею p100":"Наушники","беспроводная зарядка 15w borofone":"Зарядки","airpods 3 lux по 6900":"Наушники","наушники y08":"Наушники","зу m19":"Зарядки","usb d02v vdenmev":"USB","зу wuw c269 type-c":"Зарядки","наушники bm71 type-c":"Наушники","наушники borofone bm77":"Наушники","наушники type-c expert":"Наушники","зарядка c70a":"Зарядки","u014 usb type-c":"Зарядки","зу c268 type-c":"Зарядки","наушники ge-03":"Наушники","з,у -35w 15 pro max":"Зарядки","детские наушники":"Наушники","usb для iph":"USB","наушники g5":"Наушники","usb-c 1m реплика":"USB","x60 type-c/ip":"USB","x60 micro":"USB","наушники borofone bm35":"Наушники","usb bu16":"USB","наушник p2961":"Наушники","шнур type-c to type-c 15":"USB","зарядное устройство mi":"Зарядки","наушники ls-707/710":"Наушники","наушники redmi airdots pro3":"Наушники","наушники hoco m123":"Наушники","заряд.уст.мохом kh-22":"Зарядки","наушник byz se519a":"Наушники","наушники m1 pro type-c":"Наушники","зарядное устройство amaya e56+m":"Зарядки","wireless gharger kakusiga":"Зарядки","usb d42t":"USB","наушник byz se386a":"Наушники","usb bx32":"USB","наушники hoco m47":"Наушники","usb d02l vdenmenv":"USB","usb кабель по 700":"USB","airpods 3 по 3400":"Наушники","наушники g17":"Наушники","наушники pzx l22":"Наушники","usb d58v":"USB","usb gfuz micro":"USB","type-c xp-33":"USB","usb d02t vdenmenv":"USB","наушники по 500 yr":"Наушники","наушники ultrapods max":"Наушники","usb micro":"USB","usb x1":"USB","зарядка отау mrm-315":"Зарядки","airpods с экраном":"Наушники","наушники iphone7 type-c":"Наушники","зарядка gerlax ga-27":"Зарядки","usb szx 2m micro":"USB","наушники на шею dl01":"Наушники","наушник dr17":"Наушники","наушники bw29":"Наушники","usb c32 type-c":"USB","airpods 2 по 3400":"Наушники","наушники earpods":"Наушники","наушник xb380bt":"Наушники","usb для планшета samsung tab":"USB","usb-c lightning 1м":"USB","наушники на iphone 7":"Наушники","зу micro m3":"Зарядки","usb cable to lihgtning (1m)":"USB","зарядное устройство byz day-2002":"Зарядки","usb x21 hoco":"USB","usb gerlax gd-41":"USB","usb szx 2m ip":"USB","зу wuw 20w t74":"Зарядки","наушник dr18":"Наушники","airpods lux по 6900":"Наушники","usb 27w pd":"USB","наушники i9s 5.0":"Наушники","наушники по 650":"Наушники","usb bx37 micro":"USB","u015 usb type-c":"Зарядки","usb borofone bx100":"USB","usb szx ss206 2m":"USB","наушники wuw r186 type-c":"Наушники","usb d42v":"USB","usb c68 type-c to type-c":"USB","usb x99":"USB","наушник bm95":"Наушники","usb type-c/iphone amaya c09":"USB","usb-c to type c 60w":"USB","наушник byz se378a вакум":"Наушники","наушники на шею dl03":"Наушники","зарядное устройство gerlax ga-25p":"Зарядки","наушник h22":"Наушники","airpods 4":"Наушники","наушники kin-822":"Наушники","usb type-c to type-c original":"USB","hoco x50 micro":"USB","наушники wuw r179 type-c":"Наушники","наушник ultra":"Наушники","зарядное устройство xa-006":"Зарядки","usb cable to lightning":"USB","зарядное устройство bacy bc-05":"Зарядки","наушник type-c mletuble":"Наушники","зу amaya lightning":"Зарядки","наушники cr-8":"Наушники","зарядное устройство bass71a":"Зарядки","зарядное устройство redmi 120w":"Зарядки","наушники hf-14":"Наушники","наушники marshall major4":"Наушники","u72 samsung galaxy (usb hoco)":"USB","usb hoco x59":"USB","наушник borofone bm66":"Наушники","наушники remax rm-303":"Наушники","зу xa-007 lightning/tupe-c":"Зарядки","наушник m110":"Наушники","usb type-c x82/x86":"USB","шнур type-c to lightning":"USB","зарядка ba20a":"Зарядки","mletubl usb-c to lighting":"USB","usb gerlax l17":"USB","usb xp-40":"USB","наушники dg по 1200":"Наушники","usb lighting original":"USB","наушник x4":"Наушники","u010 usb":"Зарядки","usb szx ss268":"USB","ucb cable type to type-c (1m)":"USB","зарядное устройство borofone ba32a":"Зарядки","usb szx ss269":"USB","наушники wuw r170":"Наушники","usb wuw x213type-c":"USB","usb d07t":"USB","usb d59c vdenmenv":"USB","зарядное устройство gerlax a3":"Зарядки","usb c31 micro":"USB","наушники по 800":"Наушники","usb micro m07":"USB","зарядное устройство mi 33w":"Зарядки","usb micro cm05":"USB","наушники ge-14":"Наушники","наушник g9":"Наушники","usb borofone bx30":"USB","usb borofone bu33":"USB","usb 2m xp-55 type-c":"USB","зу lightning ga-32p":"Зарядки","usb wuw x195 type-c":"USB","наушники hoco m124":"Наушники","наушники hoco m122":"Наушники","usb type-c/lightning c14":"USB","usb xipin top lx21 ip по 1200":"USB"};
+
+function classifyGoods(name){
+  const n = normalizeItemName(name);
+  const mapped = GOODS_SUBCAT_MAP[n];
+  if (mapped) return mapped;
+  if (n.includes("наушник") || n.includes("airpods") || n.includes("гарнитур")) return "Наушники";
+  if (n.includes("зарядк") || n.includes("зу ") || n.includes("блок питания") || n.includes("адаптер питания")) return "Зарядки";
+  if (n.includes("usb") || n.includes("юсб") || n.includes("type-c") || n.includes("lightning")) return "USB";
+  return "Другие";
 }
 
 function toNum(v){
@@ -854,6 +888,58 @@ async function refreshMonthsEverywhereIfEmpty(){
   if (monthsCache.length===0) await refreshMonthsEverywhere();
 }
 
+/* ============ АГРЕГАЦИЯ ПО ПОДКАТЕГОРИЯМ (для объединённых Стекло/Товары) ============ */
+function aggregateGlassBySubtype(items){
+  const m = {}; GLASS_SUBCATS.forEach(c=>m[c]={qty:0,profit:0});
+  for (const it of items){ if (m[it.cat]){ m[it.cat].qty += it.qty; m[it.cat].profit += it.profit; } }
+  return m;
+}
+function aggregateGoodsBySubtype(items){
+  const m = {}; GOODS_SUBCATS.forEach(c=>m[c]={qty:0,profit:0});
+  for (const it of items){
+    const sub = classifyGoods(it.name);
+    m[sub].qty += it.qty; m[sub].profit += it.profit;
+  }
+  return m;
+}
+function sumQtyProfit(bySubMap){
+  const t = {qty:0, profit:0};
+  Object.values(bySubMap).forEach(v=>{ t.qty += v.qty; t.profit += v.profit; });
+  return t;
+}
+function fmtQtySum(qty, profit){
+  return `${fmt(qty)} шт / ${fmt(profit)} ₸`;
+}
+function buildDetailPanelHtml(glassBySub, goodsBySub){
+  const glassRows = GLASS_SUBCATS.filter(c=>glassBySub[c] && (glassBySub[c].qty || glassBySub[c].profit))
+    .sort((a,b)=>glassBySub[b].profit-glassBySub[a].profit)
+    .map(c=>`<tr><td><span class="dot" style="background:${GLASS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmtQtySum(glassBySub[c].qty, glassBySub[c].profit)}</td></tr>`).join("");
+  const goodsRows = GOODS_SUBCATS.filter(c=>goodsBySub[c] && (goodsBySub[c].qty || goodsBySub[c].profit))
+    .sort((a,b)=>goodsBySub[b].profit-goodsBySub[a].profit)
+    .map(c=>`<tr><td><span class="dot" style="background:${GOODS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmtQtySum(goodsBySub[c].qty, goodsBySub[c].profit)}</td></tr>`).join("");
+  return `
+    <div class="grid2">
+      <div>
+        <h4>Стекло по категориям</h4>
+        <table><tr><th>Категория</th><th>Шт / Сумма, ₸</th></tr>${glassRows || '<tr><td colspan=2>—</td></tr>'}</table>
+      </div>
+      <div>
+        <h4>Товары по категориям</h4>
+        <table><tr><th>Категория</th><th>Шт / Сумма, ₸</th></tr>${goodsRows || '<tr><td colspan=2>—</td></tr>'}</table>
+      </div>
+    </div>`;
+}
+function wireDetailToggle(scopeEl){
+  scopeEl.querySelectorAll(".toggle-detail").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const target = document.getElementById(btn.dataset.target);
+      const willShow = target.style.display === "none";
+      target.style.display = willShow ? "block" : "none";
+      btn.textContent = willShow ? "Скрыть ▴" : "Подробнее ▾";
+    });
+  });
+}
+
 function renderReport(rec){
   const content = document.getElementById("report-content");
   content.innerHTML = "";
@@ -863,32 +949,46 @@ function renderReport(rec){
   networkCard.className = "card";
   networkCard.innerHTML = `<h2>Сеть в целом — ${rec.monthLabel}</h2>
     <h3>Прибыль и продажи по категориям</h3>
-    <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>`;
+    <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>
+    <table>
+      <tr><th>Категория</th><th>Шт / Сумма, ₸</th><th>Доля</th></tr>
+      <tbody id="net-summary-tbody"></tbody>
+    </table>
+    <button class="btn-link toggle-detail" data-target="net-detail">Подробнее ▾</button>
+    <div class="detail-panel" id="net-detail" style="display:none;"></div>`;
   content.appendChild(networkCard);
 
-  const netAgg = {};
-  REPORT_CAT_ORDER.forEach(c=>netAgg[c]={qty:0,profit:0});
-  for (const p of pointsWithData){
-    const agg = aggregateByCategory(rec.points[p].filter(i=>REPORT_CAT_ORDER.includes(i.cat)));
-    for (const c of REPORT_CAT_ORDER){ if (agg[c]){ netAgg[c].qty += agg[c].qty; netAgg[c].profit += agg[c].profit; } }
-  }
-  const sortedNetCats = [...REPORT_CAT_ORDER].sort((a,b)=>netAgg[b].profit-netAgg[a].profit);
-  reportCharts.push(makeCombinedNetChart("net-combined-chart", sortedNetCats,
-    sortedNetCats.map(c=>netAgg[c].profit),
-    sortedNetCats.map(c=>netAgg[c].qty)
-  ));
+  const allNetworkItems = pointsWithData.flatMap(p=>rec.points[p]);
+  const netGlassBySub = aggregateGlassBySubtype(allNetworkItems.filter(it=>GLASS_SUBCATS.includes(it.cat)));
+  const netGoodsBySub = aggregateGoodsBySubtype(allNetworkItems.filter(it=>it.cat==="ТОВАРЫ"));
+  const netGlassTotal = sumQtyProfit(netGlassBySub);
+  const netCaseTotal = allNetworkItems.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
+  const netGoodsTotal = sumQtyProfit(netGoodsBySub);
+  const netGrandProfit = netGlassTotal.profit + netCaseTotal.profit + netGoodsTotal.profit;
+
+  networkCard.querySelector("#net-summary-tbody").innerHTML = [
+    ["Стекло", netGlassTotal], ["Чехлы", netCaseTotal], ["Товары", netGoodsTotal],
+  ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmtQtySum(t.qty, t.profit)}</td><td class="num">${netGrandProfit ? (t.profit/netGrandProfit*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
+  networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub);
+  wireDetailToggle(networkCard);
+
+  reportCharts.push(makeCombinedNetChart("net-combined-chart", netGlassBySub, netCaseTotal, netGoodsTotal));
 
   pointsWithData.forEach((p, i)=>{
     const items = rec.points[p];
-    const glassAgg = aggregateByCategory(items.filter(it=>REPORT_CAT_ORDER.includes(it.cat)));
-    const sortedCats = REPORT_CAT_ORDER.filter(c=>glassAgg[c]).sort((a,b)=>glassAgg[b].profit-glassAgg[a].profit);
-    const totalGlassProfit = sortedCats.reduce((s,c)=>s+glassAgg[c].profit,0);
+    const glassBySub = aggregateGlassBySubtype(items.filter(it=>GLASS_SUBCATS.includes(it.cat)));
+    const goodsItems = items.filter(it=>it.cat==="ТОВАРЫ");
+    const goodsBySub = aggregateGoodsBySubtype(goodsItems);
+    const glassTotal = sumQtyProfit(glassBySub);
+    const caseTotal = items.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
+    const goodsTotal = sumQtyProfit(goodsBySub);
+    const grandProfit = glassTotal.profit + caseTotal.profit + goodsTotal.profit;
 
-    const tovary = items.filter(it=>it.cat==="ТОВАРЫ");
-    const top5Qty = topN(tovary, "qty");
-    const top5Profit = topN(tovary, "profit");
+    const top5Qty = topN(goodsItems, "qty");
+    const top5Profit = topN(goodsItems, "profit");
 
     const chartId = `point-chart-${i}`;
+    const detailId = `point-detail-${i}`;
     const card = document.createElement("div");
     card.className = "card point-section";
     card.innerHTML = `
@@ -896,9 +996,11 @@ function renderReport(rec){
       <div class="grid2">
         <div>
           <table>
-            <tr><th>Категория</th><th>Шт</th><th>Прибыль, ₸</th><th>Доля</th></tr>
-            ${sortedCats.map(c=>`<tr><td>${c}</td><td class="num">${fmt(glassAgg[c].qty)}</td><td class="num">${fmt(glassAgg[c].profit)}</td><td class="num">${totalGlassProfit? (glassAgg[c].profit/totalGlassProfit*100).toFixed(1):"0.0"}%</td></tr>`).join("")}
+            <tr><th>Категория</th><th>Шт / Сумма, ₸</th><th>Доля</th></tr>
+            ${[["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].map(([label,t])=>`<tr><td>${label}</td><td class="num">${fmtQtySum(t.qty,t.profit)}</td><td class="num">${grandProfit ? (t.profit/grandProfit*100).toFixed(1) : "0.0"}%</td></tr>`).join("")}
           </table>
+          <button class="btn-link toggle-detail" data-target="${detailId}">Подробнее ▾</button>
+          <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub)}</div>
         </div>
         <div class="chart-wrap"><canvas id="${chartId}"></canvas></div>
       </div>
@@ -921,10 +1023,10 @@ function renderReport(rec){
       </div>
     `;
     content.appendChild(card);
-    reportCharts.push(makeBarChart(chartId, sortedCats, [{label:"Прибыль, ₸", data: sortedCats.map(c=>glassAgg[c].profit), color:"#4472C4"}]));
+    wireDetailToggle(card);
+    reportCharts.push(makePointChart(chartId, glassBySub, caseTotal, goodsTotal));
   });
 }
-
 function fmt(n){ return Math.round(n).toLocaleString("ru-RU"); }
 
 function makeBarChart(canvasId, labels, datasets){
@@ -942,28 +1044,60 @@ function makeBarChart(canvasId, labels, datasets){
 
 // Комбинированный график "Сеть в целом" — прибыль и штуки по категориям в одном графике
 // для прямого сравнения, каждый показатель на своей шкале (иначе штуки не видно рядом с ₸).
-function makeCombinedNetChart(canvasId, labels, profitData, qtyData){
+function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsTotal){
   const ctx = document.getElementById(canvasId);
+  const labels = ["Стекло","Чехлы","Товары"];
+  const datasets = [];
+  GLASS_SUBCATS.forEach(c=>{
+    const v = glassBySub[c] || {qty:0,profit:0};
+    datasets.push({ label:`${c} (₸)`, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y" });
+    datasets.push({ label:`${c} (шт)`, data:[v.qty,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1" });
+  });
+  datasets.push({ label:"Чехлы (₸)", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"profit", yAxisID:"y" });
+  datasets.push({ label:"Чехлы (шт)", data:[0, caseTotal.qty, 0], backgroundColor:CASE_COLOR, stack:"qty", yAxisID:"y1" });
+  datasets.push({ label:"Товары (₸)", data:[0, 0, goodsTotal.profit], backgroundColor:GOODS_COLOR, stack:"profit", yAxisID:"y" });
+  datasets.push({ label:"Товары (шт)", data:[0, 0, goodsTotal.qty], backgroundColor:GOODS_COLOR, stack:"qty", yAxisID:"y1" });
+
   return new Chart(ctx, {
     type:"bar",
-    data:{
-      labels,
-      datasets:[
-        { label:"Прибыль, ₸", data: profitData, backgroundColor:"#4472C4", yAxisID:"y" },
-        { label:"Шт", data: qtyData, backgroundColor:"#70AD47", yAxisID:"y1" },
-      ]
-    },
+    data:{ labels, datasets },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:true}, title:{display:false}, tooltip:{enabled:true} },
+      plugins:{
+        legend:{ display:true, labels:{ filter: item => !item.text.includes("(шт)") } },
+        title:{display:false},
+        tooltip:{ enabled:true, callbacks:{ label: (c)=> `${c.dataset.label}: ${fmt(c.raw)}` } }
+      },
       scales:{
-        x:{ticks:{font:{size:10}}},
-        y:{ position:"left", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Прибыль, ₸"} },
-        y1:{ position:"right", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Шт"} },
+        x:{ stacked:true, ticks:{font:{size:11}} },
+        y:{ stacked:true, position:"left", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Прибыль, ₸"} },
+        y1:{ stacked:true, position:"right", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Шт"} },
       }
     }
   });
 }
+
+function makePointChart(canvasId, glassBySub, caseTotal, goodsTotal){
+  const ctx = document.getElementById(canvasId);
+  const labels = ["Стекло","Чехлы","Товары"];
+  const datasets = [];
+  GLASS_SUBCATS.forEach(c=>{
+    const v = glassBySub[c] || {qty:0,profit:0};
+    datasets.push({ label:c, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"p" });
+  });
+  datasets.push({ label:"Чехлы", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"p" });
+  datasets.push({ label:"Товары", data:[0, 0, goodsTotal.profit], backgroundColor:GOODS_COLOR, stack:"p" });
+  return new Chart(ctx, {
+    type:"bar",
+    data:{ labels, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:true}, title:{display:false}, tooltip:{enabled:true} },
+      scales:{ x:{stacked:true, ticks:{font:{size:10}}}, y:{stacked:true, ticks:{display:false}, grid:{display:false}} }
+    }
+  });
+}
+
 
 /* ============ ЭКСПОРТ В EXCEL ============ */
 // Вставляет картинку графика (снимок уже отрисованного Chart.js) в лист рядом с таблицей.
@@ -984,34 +1118,53 @@ async function exportReportExcel(){
 
   const wb = new ExcelJS.Workbook();
 
-  const netAgg = {}; REPORT_CAT_ORDER.forEach(c=>netAgg[c]={qty:0,profit:0});
-  for (const p of pointsWithData){
-    const agg = aggregateByCategory(rec.points[p].filter(i=>REPORT_CAT_ORDER.includes(i.cat)));
-    for (const c of REPORT_CAT_ORDER){ if (agg[c]){ netAgg[c].qty+=agg[c].qty; netAgg[c].profit+=agg[c].profit; } }
-  }
-  const sortedNet = [...REPORT_CAT_ORDER].sort((a,b)=>netAgg[b].profit-netAgg[a].profit);
+  const allNetworkItems = pointsWithData.flatMap(p=>rec.points[p]);
+  const netGlassBySub = aggregateGlassBySubtype(allNetworkItems.filter(it=>GLASS_SUBCATS.includes(it.cat)));
+  const netGoodsBySub = aggregateGoodsBySubtype(allNetworkItems.filter(it=>it.cat==="ТОВАРЫ"));
+  const netGlassTotal = sumQtyProfit(netGlassBySub);
+  const netCaseTotal = allNetworkItems.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
+  const netGoodsTotal = sumQtyProfit(netGoodsBySub);
 
   const wsSummary = wb.addWorksheet("Сводка");
   wsSummary.columns = [{width:24},{width:12},{width:14}];
   wsSummary.addRow(["Категория","Шт","Прибыль, ₸"]);
-  sortedNet.forEach(c=>wsSummary.addRow([c, netAgg[c].qty, netAgg[c].profit]));
+  [["Стекло",netGlassTotal],["Чехлы",netCaseTotal],["Товары",netGoodsTotal]].forEach(([c,t])=>wsSummary.addRow([c, t.qty, t.profit]));
+  wsSummary.addRow([]);
+  wsSummary.addRow(["СТЕКЛО ПО КАТЕГОРИЯМ"]); wsSummary.addRow(["Категория","Шт","Прибыль, ₸"]);
+  GLASS_SUBCATS.filter(c=>netGlassBySub[c] && (netGlassBySub[c].qty||netGlassBySub[c].profit)).sort((a,b)=>netGlassBySub[b].profit-netGlassBySub[a].profit)
+    .forEach(c=>wsSummary.addRow([c, netGlassBySub[c].qty, netGlassBySub[c].profit]));
+  wsSummary.addRow([]);
+  wsSummary.addRow(["ТОВАРЫ ПО КАТЕГОРИЯМ"]); wsSummary.addRow(["Категория","Шт","Прибыль, ₸"]);
+  GOODS_SUBCATS.filter(c=>netGoodsBySub[c] && (netGoodsBySub[c].qty||netGoodsBySub[c].profit)).sort((a,b)=>netGoodsBySub[b].profit-netGoodsBySub[a].profit)
+    .forEach(c=>wsSummary.addRow([c, netGoodsBySub[c].qty, netGoodsBySub[c].profit]));
   // reportCharts[0] = совмещённый график прибыли и штук по сети
   addChartImageToSheet(wb, wsSummary, reportCharts[0], 4, 0);
 
   pointsWithData.forEach((p, i)=>{
     const items = rec.points[p];
-    const glassAgg = aggregateByCategory(items.filter(it=>REPORT_CAT_ORDER.includes(it.cat)));
-    const sortedCats = REPORT_CAT_ORDER.filter(c=>glassAgg[c]).sort((a,b)=>glassAgg[b].profit-glassAgg[a].profit);
-    const tovary = items.filter(it=>it.cat==="ТОВАРЫ");
-    const top5Qty = topN(tovary,"qty"), top5Profit = topN(tovary,"profit");
+    const glassBySub = aggregateGlassBySubtype(items.filter(it=>GLASS_SUBCATS.includes(it.cat)));
+    const goodsItems = items.filter(it=>it.cat==="ТОВАРЫ");
+    const goodsBySub = aggregateGoodsBySubtype(goodsItems);
+    const glassTotal = sumQtyProfit(glassBySub);
+    const caseTotal = items.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
+    const goodsTotal = sumQtyProfit(goodsBySub);
+    const top5Qty = topN(goodsItems,"qty"), top5Profit = topN(goodsItems,"profit");
 
     const sheetName = p.replace("/","-").slice(0,31);
     const ws = wb.addWorksheet(sheetName);
     ws.columns = [{width:6},{width:34},{width:14}];
 
-    ws.addRow(["РЕЙТИНГ КАТЕГОРИЙ ПО ПРИБЫЛИ"]);
+    ws.addRow(["СВОДКА ПО КАТЕГОРИЯМ"]);
     ws.addRow(["Категория","Шт","Прибыль, ₸"]);
-    sortedCats.forEach(c=>ws.addRow([c, glassAgg[c].qty, glassAgg[c].profit]));
+    [["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].forEach(([c,t])=>ws.addRow([c, t.qty, t.profit]));
+    ws.addRow([]);
+    ws.addRow(["СТЕКЛО ПО КАТЕГОРИЯМ"]); ws.addRow(["Категория","Шт","Прибыль, ₸"]);
+    GLASS_SUBCATS.filter(c=>glassBySub[c] && (glassBySub[c].qty||glassBySub[c].profit)).sort((a,b)=>glassBySub[b].profit-glassBySub[a].profit)
+      .forEach(c=>ws.addRow([c, glassBySub[c].qty, glassBySub[c].profit]));
+    ws.addRow([]);
+    ws.addRow(["ТОВАРЫ ПО КАТЕГОРИЯМ"]); ws.addRow(["Категория","Шт","Прибыль, ₸"]);
+    GOODS_SUBCATS.filter(c=>goodsBySub[c] && (goodsBySub[c].qty||goodsBySub[c].profit)).sort((a,b)=>goodsBySub[b].profit-goodsBySub[a].profit)
+      .forEach(c=>ws.addRow([c, goodsBySub[c].qty, goodsBySub[c].profit]));
     ws.addRow([]);
     ws.addRow(["ТОВАРЫ — ТОП-5 ПО КОЛИЧЕСТВУ"]); ws.addRow(["#","Товар","Шт"]);
     top5Qty.forEach((r,idx)=>ws.addRow([idx+1, r.name, r.qty]));
@@ -1031,6 +1184,7 @@ async function exportReportExcel(){
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
 
 /* ============ ИНСАЙТЫ / СРАВНЕНИЕ ТОЧЕК ============ */
 let catCompareChart = null;
