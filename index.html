@@ -255,16 +255,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
       </div>
       <div class="card">
-        <h2>Стёкла и товары по точкам</h2>
+        <h2>Стёкла и товары по точкам — Группа А: ШР, АЦ, КС, ЖГ</h2>
         <p class="muted" style="margin-top:-6px;">Нажмите на диаграмму, чтобы посмотреть разбивку по подвидам.</p>
         <div class="grid2">
           <div>
             <h3>Стёкла (шт)</h3>
-            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-glass-by-point"></canvas></div>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-glass-by-point-a"></canvas></div>
           </div>
           <div>
             <h3>Товары (шт)</h3>
-            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-goods-by-point"></canvas></div>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-goods-by-point-a"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Стёкла и товары по точкам — Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ</h2>
+        <p class="muted" style="margin-top:-6px;">Нажмите на диаграмму, чтобы посмотреть разбивку по подвидам.</p>
+        <div class="grid2">
+          <div>
+            <h3>Стёкла (шт)</h3>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-glass-by-point-b"></canvas></div>
+          </div>
+          <div>
+            <h3>Товары (шт)</h3>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-goods-by-point-b"></canvas></div>
           </div>
         </div>
       </div>
@@ -1300,18 +1314,20 @@ async function loadInsightsTab(){
   const rec = await localGetMonth(month);
   currentInsightsData = rec;
   renderGlassCaseChart(rec);
-  renderGlassGoodsByPoint(rec);
+  renderGlassGoodsByPoint(rec, POINT_GROUPS["Группа А"], "a");
+  renderGlassGoodsByPoint(rec, POINT_GROUPS["Группа Б"], "b");
   renderInsightsList();
 }
 
-// Две диаграммы "Стёкла" и "Товары" по всем точкам сети (в штуках). Клик по любой из
+// Две диаграммы "Стёкла" и "Товары" по точкам ОДНОЙ группы (в штуках). Клик по любой из
 // диаграмм открывает модальное окно с разбивкой по подвидам (для стёкол — 5D/6D/18D/
 // Приват/Гидрогель и т.д., для товаров — Наушники/Зарядки/USB/Другие) по тем же точкам.
-let glassByPointChart = null;
-let goodsByPointChart = null;
-function renderGlassGoodsByPoint(rec){
-  const pointsWithData = POINTS.filter(p=>rec.points[p]);
-  // Цвет точки закрепляется за её местом в общем списке точек, чтобы один и тот же
+// suffix — "a" или "b", чтобы держать отдельные Chart-инстансы и canvas для каждой группы.
+const glassByPointCharts = {};
+const goodsByPointCharts = {};
+function renderGlassGoodsByPoint(rec, groupPoints, suffix){
+  const pointsWithData = groupPoints.filter(p=>rec.points[p]);
+  // Цвет точки закрепляется за её местом в списке точек группы, чтобы один и тот же
   // магазин был одного цвета на обеих диаграммах, даже после сортировки по убыванию.
   const pointColorMap = {};
   pointsWithData.forEach((p,i)=>{ pointColorMap[p] = POINT_COLORS[i%POINT_COLORS.length]; });
@@ -1333,8 +1349,8 @@ function renderGlassGoodsByPoint(rec){
 
   const makeTooltip = (rowsArr, sumKey)=>({ callbacks:{ label:(c)=> fmtQtySum(c.raw, rowsArr[c.dataIndex][sumKey]||0) } });
 
-  if (glassByPointChart) glassByPointChart.destroy();
-  glassByPointChart = new Chart(document.getElementById("chart-glass-by-point"), {
+  if (glassByPointCharts[suffix]) glassByPointCharts[suffix].destroy();
+  glassByPointCharts[suffix] = new Chart(document.getElementById(`chart-glass-by-point-${suffix}`), {
     type:"bar",
     data:{ labels: glassRows.map(r=>r.p), datasets:[{ label:"Стёкла", data: glassRows.map(r=>r.gQty), backgroundColor: glassRows.map(r=>pointColorMap[r.p]) }] },
     options:{
@@ -1343,8 +1359,8 @@ function renderGlassGoodsByPoint(rec){
       scales:{ y:{ ticks:{display:false}, grid:{display:false} } }
     }
   });
-  if (goodsByPointChart) goodsByPointChart.destroy();
-  goodsByPointChart = new Chart(document.getElementById("chart-goods-by-point"), {
+  if (goodsByPointCharts[suffix]) goodsByPointCharts[suffix].destroy();
+  goodsByPointCharts[suffix] = new Chart(document.getElementById(`chart-goods-by-point-${suffix}`), {
     type:"bar",
     data:{ labels: goodsRows.map(r=>r.p), datasets:[{ label:"Товары", data: goodsRows.map(r=>r.tQty), backgroundColor: goodsRows.map(r=>pointColorMap[r.p]) }] },
     options:{
