@@ -306,7 +306,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <h2 id="drill-modal-title" style="margin:0;">Подробнее</h2>
           <button class="btn" id="drill-modal-close">Закрыть</button>
         </div>
-        <div class="chart-wrap" style="height:420px;"><canvas id="drill-modal-chart"></canvas></div>
+        <div class="pie-grid" id="drill-modal-piegrid"></div>
       </div>
     </div>
 
@@ -1311,51 +1311,63 @@ let glassByPointChart = null;
 let goodsByPointChart = null;
 function renderGlassGoodsByPoint(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
-  const glassQtyData = [], goodsQtyData = [], glassSumData = [], goodsSumData = [];
-  pointsWithData.forEach(p=>{
+  // Цвет точки закрепляется за её местом в общем списке точек, чтобы один и тот же
+  // магазин был одного цвета на обеих диаграммах, даже после сортировки по убыванию.
+  const pointColorMap = {};
+  pointsWithData.forEach((p,i)=>{ pointColorMap[p] = POINT_COLORS[i%POINT_COLORS.length]; });
+
+  const rows = pointsWithData.map(p=>{
     const items = rec.points[p];
     let gQty=0, gSum=0, tQty=0, tSum=0;
     for (const it of items){
       if (GLASS_SUBCATS.includes(it.cat)){ gQty += it.qty; gSum += (it.sum||0); }
       else if (it.cat === "ТОВАРЫ"){ tQty += it.qty; tSum += (it.sum||0); }
     }
-    glassQtyData.push(gQty); glassSumData.push(gSum);
-    goodsQtyData.push(tQty); goodsSumData.push(tSum);
+    return { p, gQty, gSum, tQty, tSum };
   });
-  const pointColors = pointsWithData.map((p,i)=>POINT_COLORS[i%POINT_COLORS.length]);
-  const makeTooltip = (sumArr)=>({ callbacks:{ label:(c)=> fmtQtySum(c.raw, sumArr[c.dataIndex]||0) } });
+
+  // Столбцы — от самого высокого к самому низкому, отдельно для каждой диаграммы
+  // (для "Стёкол" и "Товаров" порядок точек может отличаться).
+  const glassRows = [...rows].sort((a,b)=>b.gQty-a.gQty);
+  const goodsRows = [...rows].sort((a,b)=>b.tQty-a.tQty);
+
+  const makeTooltip = (rowsArr, sumKey)=>({ callbacks:{ label:(c)=> fmtQtySum(c.raw, rowsArr[c.dataIndex][sumKey]||0) } });
 
   if (glassByPointChart) glassByPointChart.destroy();
   glassByPointChart = new Chart(document.getElementById("chart-glass-by-point"), {
     type:"bar",
-    data:{ labels: pointsWithData, datasets:[{ label:"Стёкла", data: glassQtyData, backgroundColor: pointColors }] },
+    data:{ labels: glassRows.map(r=>r.p), datasets:[{ label:"Стёкла", data: glassRows.map(r=>r.gQty), backgroundColor: glassRows.map(r=>pointColorMap[r.p]) }] },
     options:{
       responsive:true, maintainAspectRatio:false, onClick: ()=>openDrillModal("glass", rec, pointsWithData),
-      plugins:{ legend:{display:false}, tooltip: makeTooltip(glassSumData) },
+      plugins:{ legend:{display:false}, tooltip: makeTooltip(glassRows, "gSum") },
       scales:{ y:{ ticks:{display:false}, grid:{display:false} } }
     }
   });
   if (goodsByPointChart) goodsByPointChart.destroy();
   goodsByPointChart = new Chart(document.getElementById("chart-goods-by-point"), {
     type:"bar",
-    data:{ labels: pointsWithData, datasets:[{ label:"Товары", data: goodsQtyData, backgroundColor: pointColors }] },
+    data:{ labels: goodsRows.map(r=>r.p), datasets:[{ label:"Товары", data: goodsRows.map(r=>r.tQty), backgroundColor: goodsRows.map(r=>pointColorMap[r.p]) }] },
     options:{
       responsive:true, maintainAspectRatio:false, onClick: ()=>openDrillModal("goods", rec, pointsWithData),
-      plugins:{ legend:{display:false}, tooltip: makeTooltip(goodsSumData) },
+      plugins:{ legend:{display:false}, tooltip: makeTooltip(goodsRows, "tSum") },
       scales:{ y:{ ticks:{display:false}, grid:{display:false} } }
     }
   });
 }
 
-// Модальное окно с разбивкой по подвидам: группированные столбики — по одному
-// цвету на каждый подвид (5D/6D/18D/... или Наушники/Зарядки/USB/Другие), точки сети
-// на оси X, чтобы было видно, из чего складывается "Стёкла"/"Товары" на каждой точке.
-let drillModalChart = null;
+// Модальное окно с разбивкой по подвидам: одна круговая диаграмма на каждый подвид
+// (5D/6D/18D/.../Гидрогель или Наушники/Зарядки/USB/Другие), доли — точки сети (шт/%).
+let drillModalCharts = [];
 function openDrillModal(kind, rec, pointsWithData){
   const subcats = kind === "glass" ? GLASS_SUBCATS : GOODS_SUBCATS;
-  const colors = kind === "glass" ? GLASS_SUBCAT_COLORS : GOODS_SUBCAT_COLORS;
   document.getElementById("drill-modal-title").textContent = kind === "glass" ? "Стёкла по подвидам" : "Товары по подвидам";
-  const datasets = subcats.map(sub=>{
+  drillModalCharts.forEach(ch=>ch.destroy());
+  drillModalCharts.length = 0;
+  const container = document.getElementById("drill-modal-piegrid");
+  container.innerHTML = "";
+  const pointColors = pointsWithData.map((p,i)=>POINT_COLORS[i%POINT_COLORS.length]);
+
+  subcats.forEach(sub=>{
     const data = pointsWithData.map(p=>{
       let s = 0;
       for (const it of rec.points[p]){
@@ -1364,13 +1376,37 @@ function openDrillModal(kind, rec, pointsWithData){
       }
       return s;
     });
-    return { label: sub, data, backgroundColor: colors[sub] };
-  });
-  if (drillModalChart) drillModalChart.destroy();
-  drillModalChart = new Chart(document.getElementById("drill-modal-chart"), {
-    type:"bar",
-    data:{ labels: pointsWithData, datasets },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:"bottom"} }, scales:{ y:{ beginAtZero:true } } }
+    const total = data.reduce((a,b)=>a+b,0);
+    const item = document.createElement("div");
+    item.className = "pie-item";
+    const title = document.createElement("h4");
+    title.textContent = sub;
+    const wrap = document.createElement("div");
+    wrap.className = "pie-item-wrap";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    item.appendChild(title);
+    item.appendChild(wrap);
+    container.appendChild(item);
+    if (total === 0){
+      wrap.innerHTML = "<p class='muted' style='text-align:center;margin-top:70px;'>Нет продаж</p>";
+      return;
+    }
+    const chart = new Chart(canvas, {
+      type:"pie",
+      data:{ labels: pointsWithData, datasets:[{ data, backgroundColor: pointColors }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:9}, padding:6 } },
+          tooltip:{ callbacks:{ label:(c)=>{
+            const pct = total>0 ? (c.raw/total*100).toFixed(1) : 0;
+            return `${c.label}: ${fmt(c.raw)} шт (${pct}%)`;
+          } } }
+        }
+      }
+    });
+    drillModalCharts.push(chart);
   });
   document.getElementById("drill-modal-overlay").style.display = "flex";
 }
