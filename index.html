@@ -1023,8 +1023,8 @@ function renderReport(rec){
         <div class="grid2">
           <div>
             <h3>Топ-5 по количеству</h3>
-            <table><tr><th>#</th><th>Товар</th><th>Шт</th></tr>
-            ${top5Qty.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmt(r.qty)}</td></tr>`).join("") || "<tr><td colspan=3>—</td></tr>"}
+            <table><tr><th>#</th><th>Товар</th><th>Шт / Сумма, ₸</th></tr>
+            ${top5Qty.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmtQtySum(r.qty, r.sum||0)}</td></tr>`).join("") || "<tr><td colspan=3>—</td></tr>"}
             </table>
           </div>
           <div>
@@ -1295,7 +1295,8 @@ let glassCaseProfitChart = null;
 function renderGlassCaseChart(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
   const glassQtyData = [], caseQtyData = [], glassProfitData = [], caseProfitData = [];
-  let totalGlassQty = 0, totalCaseQty = 0, totalGlassProfit = 0, totalCaseProfit = 0;
+  const glassSumData = [], caseSumData = [];
+  let totalGlassQty = 0, totalCaseQty = 0, totalGlassProfit = 0, totalCaseProfit = 0, totalGlassSum = 0, totalCaseSum = 0;
   pointsWithData.forEach(p=>{
     const items = rec.points[p];
     const glassItems = items.filter(it=>GLASS_RATIO_CATS.includes(it.cat));
@@ -1304,13 +1305,23 @@ function renderGlassCaseChart(rec){
     const caseQty = caseItems.reduce((s,it)=>s+it.qty,0);
     const glassProfit = glassItems.reduce((s,it)=>s+it.profit,0);
     const caseProfit = caseItems.reduce((s,it)=>s+it.profit,0);
+    const glassSum = glassItems.reduce((s,it)=>s+(it.sum||0),0);
+    const caseSum = caseItems.reduce((s,it)=>s+(it.sum||0),0);
     glassQtyData.push(glassQty); caseQtyData.push(caseQty);
     glassProfitData.push(glassProfit); caseProfitData.push(caseProfit);
+    glassSumData.push(glassSum); caseSumData.push(caseSum);
     totalGlassQty += glassQty; totalCaseQty += caseQty;
     totalGlassProfit += glassProfit; totalCaseProfit += caseProfit;
+    totalGlassSum += glassSum; totalCaseSum += caseSum;
   });
   const summaryEl = document.getElementById("glass-case-summary");
-  if (summaryEl) summaryEl.textContent = `Всего по сети: ${fmt(totalGlassQty)} шт стёкол (${fmt(totalGlassProfit)} ₸) — ${fmt(totalCaseQty)} шт чехлов (${fmt(totalCaseProfit)} ₸)`;
+  if (summaryEl) summaryEl.textContent = `Всего по сети: ${fmtQtySum(totalGlassQty, totalGlassSum)} стёкол (прибыль ${fmt(totalGlassProfit)} ₸) — ${fmtQtySum(totalCaseQty, totalCaseSum)} чехлов (прибыль ${fmt(totalCaseProfit)} ₸)`;
+  // В подсказке при наведении на график "шт" добавляем сумму продаж через "/" — сам вид
+  // графика не меняется, только текст подсказки.
+  const qtyTooltip = { callbacks:{ label:(c)=>{
+    const sumArr = c.datasetIndex === 0 ? glassSumData : caseSumData;
+    return `${c.dataset.label}: ${fmtQtySum(c.raw, sumArr[c.dataIndex]||0)}`;
+  } } };
   if (glassCaseChart) glassCaseChart.destroy();
   glassCaseChart = new Chart(document.getElementById("chart-glass-case"), {
     type:"bar",
@@ -1318,7 +1329,7 @@ function renderGlassCaseChart(rec){
       { label:"Стёкла", data: glassQtyData, backgroundColor:"#4472C4" },
       { label:"Чехлы", data: caseQtyData, backgroundColor:"#ED7D31" },
     ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}, tooltip: qtyTooltip}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
   });
   if (glassCaseProfitChart) glassCaseProfitChart.destroy();
   glassCaseProfitChart = new Chart(document.getElementById("chart-glass-case-profit"), {
@@ -1330,6 +1341,7 @@ function renderGlassCaseChart(rec){
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
   });
 }
+
 
 // Группа А и Группа Б — фиксированные объединения точек. Точки внутри каждой группы
 // сравниваются между собой (а не группа с группой).
