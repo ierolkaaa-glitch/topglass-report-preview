@@ -354,15 +354,17 @@ const INSIGHTS_CAT_ORDER = CAT_ORDER.filter(c=>c!=="Матовое стекло"
 // месяц — сами по себе не показываются отдельными столбцами, но видны как цветные сегменты
 // внутри столбца "Стекло" (и в развороте "Подробнее").
 const GLASS_SUBCATS = REPORT_CAT_ORDER.filter(c=>c!=="ЧЕХЛЫ" && c!=="ТОВАРЫ");
+// Цвета подобраны как оттенки одного цвета на группу (стекло — синий, товары — зелёный),
+// чтобы столбец с несколькими подкатегориями смотрелся аккуратно, а не пёстро.
 const GLASS_SUBCAT_COLORS = {
-  "5D":"#4472C4", "6D":"#ED7D31", "18D":"#A5A5A5", "Приват":"#FFC000",
-  "Приват по 270":"#5B9BD5", "Стекло по 1500/1490":"#70AD47", "Гидрогель":"#264478"
+  "5D":"#1F3864", "6D":"#2E5395", "18D":"#3D6FBF", "Приват":"#4F86D6",
+  "Приват по 270":"#6FA0E0", "Стекло по 1500/1490":"#8FBAEA", "Гидрогель":"#0D2847"
 };
-const CASE_COLOR = "#9E480E";
-const GOODS_COLOR = "#636363";
+const CASE_COLOR = "#BF7F3F";
+const GOODS_COLOR = "#548235";
 // Подкатегории "Товаров" (всё, что не стекло и не чехлы) — только для отчёта за месяц.
 const GOODS_SUBCATS = ["Наушники","Зарядки","USB","Другие"];
-const GOODS_SUBCAT_COLORS = { "Наушники":"#4472C4", "Зарядки":"#ED7D31", "USB":"#A5A5A5", "Другие":"#FFC000" };
+const GOODS_SUBCAT_COLORS = { "Наушники":"#375623", "Зарядки":"#548235", "USB":"#70AD47", "Другие":"#A9D18E" };
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -951,7 +953,7 @@ function renderReport(rec){
     <h3>Прибыль и продажи по категориям</h3>
     <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>
     <table>
-      <tr><th>Категория</th><th>Шт / Сумма, ₸</th><th>Доля</th></tr>
+      <tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th><th>Процент по шт</th></tr>
       <tbody id="net-summary-tbody"></tbody>
     </table>
     <button class="btn-link toggle-detail" data-target="net-detail">Подробнее ▾</button>
@@ -964,15 +966,15 @@ function renderReport(rec){
   const netGlassTotal = sumQtyProfit(netGlassBySub);
   const netCaseTotal = allNetworkItems.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
   const netGoodsTotal = sumQtyProfit(netGoodsBySub);
-  const netGrandProfit = netGlassTotal.profit + netCaseTotal.profit + netGoodsTotal.profit;
+  const netGrandQty = netGlassTotal.qty + netCaseTotal.qty + netGoodsTotal.qty;
 
   networkCard.querySelector("#net-summary-tbody").innerHTML = [
     ["Стекло", netGlassTotal], ["Чехлы", netCaseTotal], ["Товары", netGoodsTotal],
-  ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmtQtySum(t.qty, t.profit)}</td><td class="num">${netGrandProfit ? (t.profit/netGrandProfit*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
+  ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty, t.profit)}</td><td class="num">${netGrandQty ? (t.qty/netGrandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
   networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub);
   wireDetailToggle(networkCard);
 
-  reportCharts.push(makeCombinedNetChart("net-combined-chart", netGlassBySub, netCaseTotal, netGoodsTotal));
+  reportCharts.push(makeCombinedNetChart("net-combined-chart", netGlassBySub, netCaseTotal, netGoodsBySub));
 
   pointsWithData.forEach((p, i)=>{
     const items = rec.points[p];
@@ -982,7 +984,7 @@ function renderReport(rec){
     const glassTotal = sumQtyProfit(glassBySub);
     const caseTotal = items.filter(it=>it.cat==="ЧЕХЛЫ").reduce((a,it)=>({qty:a.qty+it.qty, profit:a.profit+it.profit}), {qty:0,profit:0});
     const goodsTotal = sumQtyProfit(goodsBySub);
-    const grandProfit = glassTotal.profit + caseTotal.profit + goodsTotal.profit;
+    const grandQty = glassTotal.qty + caseTotal.qty + goodsTotal.qty;
 
     const top5Qty = topN(goodsItems, "qty");
     const top5Profit = topN(goodsItems, "profit");
@@ -996,8 +998,8 @@ function renderReport(rec){
       <div class="grid2">
         <div>
           <table>
-            <tr><th>Категория</th><th>Шт / Сумма, ₸</th><th>Доля</th></tr>
-            ${[["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].map(([label,t])=>`<tr><td>${label}</td><td class="num">${fmtQtySum(t.qty,t.profit)}</td><td class="num">${grandProfit ? (t.profit/grandProfit*100).toFixed(1) : "0.0"}%</td></tr>`).join("")}
+            <tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th><th>Процент по шт</th></tr>
+            ${[["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].map(([label,t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty,t.profit)}</td><td class="num">${grandQty ? (t.qty/grandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("")}
           </table>
           <button class="btn-link toggle-detail" data-target="${detailId}">Подробнее ▾</button>
           <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub)}</div>
@@ -1024,7 +1026,7 @@ function renderReport(rec){
     `;
     content.appendChild(card);
     wireDetailToggle(card);
-    reportCharts.push(makePointChart(chartId, glassBySub, caseTotal, goodsTotal));
+    reportCharts.push(makePointChart(chartId, glassBySub, caseTotal, goodsBySub));
   });
 }
 function fmt(n){ return Math.round(n).toLocaleString("ru-RU"); }
@@ -1044,29 +1046,100 @@ function makeBarChart(canvasId, labels, datasets){
 
 // Комбинированный график "Сеть в целом" — прибыль и штуки по категориям в одном графике
 // для прямого сравнения, каждый показатель на своей шкале (иначе штуки не видно рядом с ₸).
-function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsTotal){
+// Плагин Chart.js для подписи значений прямо на графике (не только в подсказке при
+// наведении) — это нужно, чтобы шт/сумма было видно и на статичном скриншоте/в Excel.
+const totalLabelsPlugin = {
+  id: "totalLabels",
+  afterDatasetsDraw(chart){
+    const opts = chart.options.plugins && chart.options.plugins.totalLabels;
+    if (!opts || !opts.items) return;
+    const {ctx} = chart;
+    opts.items.forEach(item=>{
+      const xScale = chart.scales[item.xAxisID || "x"];
+      const yScale = chart.scales[item.yAxisID || "y"];
+      if (!xScale || !yScale) return;
+      const x = xScale.getPixelForValue(item.index);
+      const y = yScale.getPixelForValue(item.value) - 10;
+      ctx.save();
+      ctx.font = "bold 11px Arial";
+      const w = ctx.measureText(item.text).width;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(x-w/2-4, y-9, w+8, 16);
+      ctx.fillStyle = "#1f2937";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(item.text, x, y);
+      ctx.restore();
+    });
+  }
+};
+Chart.register(totalLabelsPlugin);
+
+// Подписи внутри каждого цветного сегмента столбца (если сегмент достаточно высокий,
+// иначе подпись не поместится и мы её не рисуем — но по-прежнему видно в подсказке).
+const segmentLabelsPlugin = {
+  id: "segmentLabels",
+  afterDatasetsDraw(chart){
+    const {ctx} = chart;
+    chart.data.datasets.forEach((dataset, dsIndex)=>{
+      if (!dataset.segmentLabels) return;
+      const meta = chart.getDatasetMeta(dsIndex);
+      meta.data.forEach((bar, index)=>{
+        const label = dataset.segmentLabels[index];
+        if (!label) return;
+        const {x, y, base} = bar.getProps(["x","y","base"], true);
+        const h = Math.abs(base - y);
+        if (h < 16) return;
+        ctx.save();
+        ctx.font = "9px Arial";
+        const w = ctx.measureText(label).width;
+        const cy = (y+base)/2;
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.fillRect(x-w/2-3, cy-7, w+6, 14);
+        ctx.fillStyle = "#1f2937";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(label, x, cy);
+        ctx.restore();
+      });
+    });
+  }
+};
+Chart.register(segmentLabelsPlugin);
+
+function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub){
   const ctx = document.getElementById(canvasId);
   const labels = ["Стекло","Чехлы","Товары"];
   const datasets = [];
   GLASS_SUBCATS.forEach(c=>{
     const v = glassBySub[c] || {qty:0,profit:0};
-    datasets.push({ label:`${c} (₸)`, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y" });
+    datasets.push({ label:`${c} (₸)`, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y", segmentLabels:[v.profit?fmtQtySum(v.qty,v.profit):"", undefined, undefined] });
     datasets.push({ label:`${c} (шт)`, data:[v.qty,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1" });
   });
   datasets.push({ label:"Чехлы (₸)", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"profit", yAxisID:"y" });
   datasets.push({ label:"Чехлы (шт)", data:[0, caseTotal.qty, 0], backgroundColor:CASE_COLOR, stack:"qty", yAxisID:"y1" });
-  datasets.push({ label:"Товары (₸)", data:[0, 0, goodsTotal.profit], backgroundColor:GOODS_COLOR, stack:"profit", yAxisID:"y" });
-  datasets.push({ label:"Товары (шт)", data:[0, 0, goodsTotal.qty], backgroundColor:GOODS_COLOR, stack:"qty", yAxisID:"y1" });
+  GOODS_SUBCATS.forEach(c=>{
+    const v = goodsBySub[c] || {qty:0,profit:0};
+    datasets.push({ label:`${c} (₸)`, data:[0,0,v.profit], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y", segmentLabels:[undefined, undefined, v.profit?fmtQtySum(v.qty,v.profit):""] });
+    datasets.push({ label:`${c} (шт)`, data:[0,0,v.qty], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1" });
+  });
+
+  const glassTotal = sumQtyProfit(glassBySub);
+  const goodsTotal = sumQtyProfit(goodsBySub);
 
   return new Chart(ctx, {
     type:"bar",
     data:{ labels, datasets },
     options:{
       responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{top:24} },
       plugins:{
-        legend:{ display:true, labels:{ filter: item => !item.text.includes("(шт)") } },
+        legend:{ display:true, labels:{ filter: item => !item.text.includes("(шт)"), font:{size:10} } },
         title:{display:false},
-        tooltip:{ enabled:true, callbacks:{ label: (c)=> `${c.dataset.label}: ${fmt(c.raw)}` } }
+        tooltip:{ enabled:true, callbacks:{ label: (c)=> `${c.dataset.label}: ${fmt(c.raw)}` } },
+        totalLabels:{ items:[
+          { index:0, value: glassTotal.profit, text: fmtQtySum(glassTotal.qty, glassTotal.profit) },
+          { index:1, value: caseTotal.profit, text: fmtQtySum(caseTotal.qty, caseTotal.profit) },
+          { index:2, value: goodsTotal.profit, text: fmtQtySum(goodsTotal.qty, goodsTotal.profit) },
+        ] }
       },
       scales:{
         x:{ stacked:true, ticks:{font:{size:11}} },
@@ -1077,22 +1150,37 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsTotal){
   });
 }
 
-function makePointChart(canvasId, glassBySub, caseTotal, goodsTotal){
+function makePointChart(canvasId, glassBySub, caseTotal, goodsBySub){
   const ctx = document.getElementById(canvasId);
   const labels = ["Стекло","Чехлы","Товары"];
   const datasets = [];
   GLASS_SUBCATS.forEach(c=>{
     const v = glassBySub[c] || {qty:0,profit:0};
-    datasets.push({ label:c, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"p" });
+    datasets.push({ label:c, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"p", segmentLabels:[v.profit?fmtQtySum(v.qty,v.profit):"", undefined, undefined] });
   });
   datasets.push({ label:"Чехлы", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"p" });
-  datasets.push({ label:"Товары", data:[0, 0, goodsTotal.profit], backgroundColor:GOODS_COLOR, stack:"p" });
+  GOODS_SUBCATS.forEach(c=>{
+    const v = goodsBySub[c] || {qty:0,profit:0};
+    datasets.push({ label:c, data:[0,0,v.profit], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"p", segmentLabels:[undefined, undefined, v.profit?fmtQtySum(v.qty,v.profit):""] });
+  });
+
+  const glassTotal = sumQtyProfit(glassBySub);
+  const goodsTotal = sumQtyProfit(goodsBySub);
+
   return new Chart(ctx, {
     type:"bar",
     data:{ labels, datasets },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:true}, title:{display:false}, tooltip:{enabled:true} },
+      layout:{ padding:{top:24} },
+      plugins:{
+        legend:{ display:true, labels:{font:{size:10}} }, title:{display:false}, tooltip:{enabled:true},
+        totalLabels:{ items:[
+          { index:0, value: glassTotal.profit, text: fmtQtySum(glassTotal.qty, glassTotal.profit) },
+          { index:1, value: caseTotal.profit, text: fmtQtySum(caseTotal.qty, caseTotal.profit) },
+          { index:2, value: goodsTotal.profit, text: fmtQtySum(goodsTotal.qty, goodsTotal.profit) },
+        ] }
+      },
       scales:{ x:{stacked:true, ticks:{font:{size:10}}}, y:{stacked:true, ticks:{display:false}, grid:{display:false}} }
     }
   });
