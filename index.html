@@ -1290,13 +1290,13 @@ async function loadInsightsTab(){
 function renderCatCompareChart(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByCategory(rec.points[p].filter(it=>INSIGHTS_CAT_ORDER.includes(it.cat)));
-    return { label:p, data: INSIGHTS_CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    const agg = aggregateByInsightsCategory(rec.points[p]);
+    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (catCompareChart) catCompareChart.destroy();
   catCompareChart = new Chart(document.getElementById("chart-cat-compare"), {
     type:"bar",
-    data:{ labels: INSIGHTS_CAT_ORDER, datasets },
+    data:{ labels: INSIGHTS_CHART_CATS, datasets },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
   });
 }
@@ -1368,21 +1368,21 @@ let groupBChart = null;
 function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
   const pointsWithData = groupPoints.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByCategory(rec.points[p].filter(it=>INSIGHTS_CAT_ORDER.includes(it.cat)));
-    return { label:p, data: INSIGHTS_CAT_ORDER.map(c=>agg[c]?agg[c].profit:0), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    const agg = aggregateByInsightsCategory(rec.points[p]);
+    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (chartVarName === "groupAChart"){
     if (groupAChart) groupAChart.destroy();
     groupAChart = new Chart(document.getElementById(canvasId), {
       type:"bar",
-      data:{ labels: INSIGHTS_CAT_ORDER, datasets },
+      data:{ labels: INSIGHTS_CHART_CATS, datasets },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
     });
   } else {
     if (groupBChart) groupBChart.destroy();
     groupBChart = new Chart(document.getElementById(canvasId), {
       type:"bar",
-      data:{ labels: INSIGHTS_CAT_ORDER, datasets },
+      data:{ labels: INSIGHTS_CHART_CATS, datasets },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
     });
   }
@@ -1406,6 +1406,20 @@ function insightsCategoryOf(it){
     return sub;
   }
   return null;
+}
+
+// Тот же набор категорий используется и для диаграмм на вкладке инсайтов
+// ("Категории стекла по точкам", Группа А, Группа Б) — чтобы диаграммы и
+// текстовый список инсайдов ниже показывали одну и ту же группировку.
+const INSIGHTS_CHART_CATS = ["Стекло","Гидрогель","Наушники","Зарядки","USB","Адаптеры","Другие"];
+function aggregateByInsightsCategory(items){
+  const m = {}; INSIGHTS_CHART_CATS.forEach(c=>m[c]={qty:0,profit:0,sum:0});
+  for (const it of items){
+    const cat = insightsCategoryOf(it);
+    if (!cat || !m[cat]) continue;
+    m[cat].qty += it.qty; m[cat].profit += it.profit; m[cat].sum += (it.sum||0);
+  }
+  return m;
 }
 
 function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
