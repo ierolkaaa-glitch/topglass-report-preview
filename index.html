@@ -150,6 +150,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:20px;}
   @media(max-width:900px){.grid2{grid-template-columns:1fr;}}
   .chart-wrap{position:relative; height:260px;}
+  .pie-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:16px;}
+  .pie-item{display:flex; flex-direction:column; align-items:stretch;}
+  .pie-item h4{font-size:12px; text-align:center; margin:0 0 6px; color:var(--text);}
+  .pie-item-wrap{position:relative; height:200px;}
   .point-section{border-top:3px solid var(--accent); margin-top:22px; padding-top:14px;}
   .point-section h3.point-title{font-size:16px; color:var(--accent); margin:0 0 12px;}
   .goods-section{border-top:3px solid var(--green);}
@@ -241,7 +245,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div class="card">
         <h2>Категории стекла по точкам</h2>
-        <div class="chart-wrap" style="height:340px;"><canvas id="chart-cat-compare"></canvas></div>
+        <div class="pie-grid" id="pie-grid-all"></div>
       </div>
       <div class="card">
         <h2>Соотношение стёкол и чехлов</h2>
@@ -253,11 +257,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div class="card">
         <h2>Группа А: ШР, АЦ, КС, ЖГ (между собой)</h2>
-        <div class="chart-wrap" style="height:340px;"><canvas id="chart-group-a"></canvas></div>
+        <div class="pie-grid" id="pie-grid-groupa"></div>
       </div>
       <div class="card">
         <h2>Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ (между собой)</h2>
-        <div class="chart-wrap" style="height:340px;"><canvas id="chart-group-b"></canvas></div>
+        <div class="pie-grid" id="pie-grid-groupb"></div>
       </div>
       <div class="card">
         <h2>Инсайты: где продаётся заметно больше/меньше</h2>
@@ -1267,7 +1271,6 @@ async function exportReportExcel(){
 
 
 /* ============ ИНСАЙТЫ / СРАВНЕНИЕ ТОЧЕК ============ */
-let catCompareChart = null;
 document.getElementById("insights-month-select").addEventListener("change", loadInsightsTab);
 document.getElementById("ratio-slider").addEventListener("input", e=>{ document.getElementById("ratio-val").textContent = e.target.value; renderInsightsList(); });
 document.getElementById("diff-slider").addEventListener("input", e=>{ document.getElementById("diff-val").textContent = e.target.value; renderInsightsList(); });
@@ -1280,24 +1283,66 @@ async function loadInsightsTab(){
   if (!month) return;
   const rec = await localGetMonth(month);
   currentInsightsData = rec;
-  renderCatCompareChart(rec);
+  renderInsightsPieGroup("pie-grid-all", rec, POINTS, allPieCharts);
   renderGlassCaseChart(rec);
-  renderGroupChart(rec, POINT_GROUPS["Группа А"], "chart-group-a", "groupAChart");
-  renderGroupChart(rec, POINT_GROUPS["Группа Б"], "chart-group-b", "groupBChart");
+  renderInsightsPieGroup("pie-grid-groupa", rec, POINT_GROUPS["Группа А"], groupAPieCharts);
+  renderInsightsPieGroup("pie-grid-groupb", rec, POINT_GROUPS["Группа Б"], groupBPieCharts);
   renderInsightsList();
 }
 
-function renderCatCompareChart(rec){
-  const pointsWithData = POINTS.filter(p=>rec.points[p]);
-  const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByInsightsCategory(rec.points[p]);
-    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
-  });
-  if (catCompareChart) catCompareChart.destroy();
-  catCompareChart = new Chart(document.getElementById("chart-cat-compare"), {
-    type:"bar",
-    data:{ labels: INSIGHTS_CHART_CATS, datasets },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
+// Круговые диаграммы по категориям инсайдов: для каждой из 7 категорий — одна
+// круговая диаграмма, где доли — это точки (в штуках). points — список точек,
+// которые нужно учитывать (все точки сети, либо только точки одной группы).
+// chartArrayRef — массив, в котором хранятся созданные Chart-инстансы этого
+// набора, чтобы их можно было уничтожить перед перерисовкой.
+let allPieCharts = [];
+let groupAPieCharts = [];
+let groupBPieCharts = [];
+function renderInsightsPieGroup(containerId, rec, points, chartArrayRef){
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  chartArrayRef.forEach(ch=>ch.destroy());
+  chartArrayRef.length = 0;
+  container.innerHTML = "";
+  const pointsWithData = points.filter(p=>rec.points[p]);
+  const pointColors = pointsWithData.map((p,i)=>POINT_COLORS[i%POINT_COLORS.length]);
+  INSIGHTS_CHART_CATS.forEach(cat=>{
+    const data = pointsWithData.map(p=>{
+      let s = 0;
+      for (const it of rec.points[p]){ if (insightsCategoryOf(it) === cat) s += it.qty; }
+      return s;
+    });
+    const total = data.reduce((a,b)=>a+b,0);
+    const item = document.createElement("div");
+    item.className = "pie-item";
+    const title = document.createElement("h4");
+    title.textContent = cat;
+    const wrap = document.createElement("div");
+    wrap.className = "pie-item-wrap";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    item.appendChild(title);
+    item.appendChild(wrap);
+    container.appendChild(item);
+    if (total === 0){
+      wrap.innerHTML = "<p class='muted' style='text-align:center;margin-top:70px;'>Нет продаж</p>";
+      return;
+    }
+    const chart = new Chart(canvas, {
+      type:"pie",
+      data:{ labels: pointsWithData, datasets:[{ data, backgroundColor: pointColors }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:9}, padding:6 } },
+          tooltip:{ callbacks:{ label:(c)=>{
+            const pct = total>0 ? (c.raw/total*100).toFixed(1) : 0;
+            return `${c.label}: ${fmt(c.raw)} шт (${pct}%)`;
+          } } }
+        }
+      }
+    });
+    chartArrayRef.push(chart);
   });
 }
 
@@ -1363,31 +1408,6 @@ const POINT_GROUPS = {
   "Группа А": ["ШР","АЦ","КС","ЖГ"],
   "Группа Б": ["ХБК","ВОКЗ/ЖД","ОРАЛ","ХРОМ"],
 };
-let groupAChart = null;
-let groupBChart = null;
-function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
-  const pointsWithData = groupPoints.filter(p=>rec.points[p]);
-  const datasets = pointsWithData.map((p,i)=>{
-    const agg = aggregateByInsightsCategory(rec.points[p]);
-    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
-  });
-  if (chartVarName === "groupAChart"){
-    if (groupAChart) groupAChart.destroy();
-    groupAChart = new Chart(document.getElementById(canvasId), {
-      type:"bar",
-      data:{ labels: INSIGHTS_CHART_CATS, datasets },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
-    });
-  } else {
-    if (groupBChart) groupBChart.destroy();
-    groupBChart = new Chart(document.getElementById(canvasId), {
-      type:"bar",
-      data:{ labels: INSIGHTS_CHART_CATS, datasets },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}, scales:{y:{ticks:{display:false}, grid:{display:false}}} }
-    });
-  }
-}
-
 // Категории для поиска заметных расхождений между точками — своя, более крупная
 // группировка специально для инсайтов (не путать с категориями отчёта): всё стекло
 // (кроме гидрогеля) объединено в одну "Стекло", Гидрогель — отдельно (включая гидрогель
