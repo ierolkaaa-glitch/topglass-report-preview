@@ -274,6 +274,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="insights-list-a" style="margin-top:6px;"></div>
         <h3>Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ</h3>
         <div id="insights-list-b" style="margin-top:6px;"></div>
+        <div class="slider-row" style="margin-top:14px;">
+          <label style="width:230px;">Фильтр по категории:</label>
+          <select id="insights-cat-filter">
+            <option value="">Все категории</option>
+            <option value="Стекло">Стекло</option>
+            <option value="Гидрогель">Гидрогель</option>
+            <option value="Наушники">Наушники</option>
+            <option value="Зарядки">Зарядки</option>
+            <option value="USB">USB</option>
+            <option value="Адаптеры">Адаптеры</option>
+            <option value="Другие">Другие</option>
+          </select>
+        </div>
       </div>
     </section>
 
@@ -1258,6 +1271,7 @@ let catCompareChart = null;
 document.getElementById("insights-month-select").addEventListener("change", loadInsightsTab);
 document.getElementById("ratio-slider").addEventListener("input", e=>{ document.getElementById("ratio-val").textContent = e.target.value; renderInsightsList(); });
 document.getElementById("diff-slider").addEventListener("input", e=>{ document.getElementById("diff-val").textContent = e.target.value; renderInsightsList(); });
+document.getElementById("insights-cat-filter").addEventListener("change", renderInsightsList);
 
 let currentInsightsData = null;
 async function loadInsightsTab(){
@@ -1437,9 +1451,14 @@ function renderInsightsList(){
   const rec = currentInsightsData;
   const ratioThresh = parseFloat(document.getElementById("ratio-slider").value);
   const diffThresh = parseFloat(document.getElementById("diff-slider").value);
+  const catFilter = document.getElementById("insights-cat-filter").value;
 
-  const topA = computeGroupInsights(rec, POINT_GROUPS["Группа А"], ratioThresh, diffThresh);
-  const topB = computeGroupInsights(rec, POINT_GROUPS["Группа Б"], ratioThresh, diffThresh);
+  let topA = computeGroupInsights(rec, POINT_GROUPS["Группа А"], ratioThresh, diffThresh);
+  let topB = computeGroupInsights(rec, POINT_GROUPS["Группа Б"], ratioThresh, diffThresh);
+  if (catFilter){
+    topA = topA.filter(ins=>ins.name === catFilter);
+    topB = topB.filter(ins=>ins.name === catFilter);
+  }
   renderInsightsGroupList("insights-list-a", topA);
   renderInsightsGroupList("insights-list-b", topB);
 }
