@@ -1110,14 +1110,14 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
   GLASS_SUBCATS.forEach(c=>{
     const v = glassBySub[c] || {qty:0,profit:0,sum:0};
     datasets.push({ label:`${c} (₸)`, data:[v.profit,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y" });
-    datasets.push({ label:`${c} (шт)`, data:[v.qty,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1" });
+    datasets.push({ label:`${c} (шт)`, data:[v.qty,0,0], backgroundColor:GLASS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1", sumValues:[v.sum,0,0] });
   });
   datasets.push({ label:"Чехлы (₸)", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"profit", yAxisID:"y" });
-  datasets.push({ label:"Чехлы (шт)", data:[0, caseTotal.qty, 0], backgroundColor:CASE_COLOR, stack:"qty", yAxisID:"y1" });
+  datasets.push({ label:"Чехлы (шт)", data:[0, caseTotal.qty, 0], backgroundColor:CASE_COLOR, stack:"qty", yAxisID:"y1", sumValues:[0, caseTotal.sum, 0] });
   GOODS_SUBCATS.forEach(c=>{
     const v = goodsBySub[c] || {qty:0,profit:0,sum:0};
     datasets.push({ label:`${c} (₸)`, data:[0,0,v.profit], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y" });
-    datasets.push({ label:`${c} (шт)`, data:[0,0,v.qty], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1" });
+    datasets.push({ label:`${c} (шт)`, data:[0,0,v.qty], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"qty", yAxisID:"y1", sumValues:[0,0,v.sum] });
   });
 
   const glassTotal = sumQtyProfit(glassBySub);
@@ -1132,7 +1132,15 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
       plugins:{
         legend:{ display:true, labels:{ filter: item => !item.text.includes("(шт)"), font:{size:10} } },
         title:{display:false},
-        tooltip:{ enabled:true, callbacks:{ label: (c)=> `${c.dataset.label}: ${fmt(c.raw)}` } },
+        // В подсказке при наведении/нажатии на "шт"-столбец показываем сразу и шт, и сумму
+        // продаж через "/" — сам вид графика (столбцы, цвета) при этом не меняется.
+        tooltip:{ enabled:true, callbacks:{ label: (c)=>{
+          if (c.dataset.sumValues){
+            const s = c.dataset.sumValues[c.dataIndex] || 0;
+            return `${c.dataset.label}: ${fmtQtySum(c.raw, s)}`;
+          }
+          return `${c.dataset.label}: ${fmt(c.raw)}`;
+        } } },
         totalLabels: showTotalLabels ? { items:[
           { datasetIndex:0, index:0, yAxisID:"y", value: glassTotal.profit, text: fmt(glassTotal.profit) },
           { datasetIndex:CASE_PROFIT_DS, index:1, yAxisID:"y", value: caseTotal.profit, text: fmt(caseTotal.profit) },
