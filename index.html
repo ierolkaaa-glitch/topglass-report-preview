@@ -244,10 +244,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
       </div>
       <div class="card">
-        <h2>Категории стекла по точкам</h2>
-        <div class="pie-grid" id="pie-grid-all"></div>
-      </div>
-      <div class="card">
         <h2>Соотношение стёкол и чехлов</h2>
         <p class="muted" id="glass-case-summary" style="margin-top:-6px;"></p>
         <div class="grid2">
@@ -1283,7 +1279,6 @@ async function loadInsightsTab(){
   if (!month) return;
   const rec = await localGetMonth(month);
   currentInsightsData = rec;
-  renderInsightsPieGroup("pie-grid-all", rec, POINTS, allPieCharts);
   renderGlassCaseChart(rec);
   renderInsightsPieGroup("pie-grid-groupa", rec, POINT_GROUPS["Группа А"], groupAPieCharts);
   renderInsightsPieGroup("pie-grid-groupb", rec, POINT_GROUPS["Группа Б"], groupBPieCharts);
@@ -1295,7 +1290,6 @@ async function loadInsightsTab(){
 // которые нужно учитывать (все точки сети, либо только точки одной группы).
 // chartArrayRef — массив, в котором хранятся созданные Chart-инстансы этого
 // набора, чтобы их можно было уничтожить перед перерисовкой.
-let allPieCharts = [];
 let groupAPieCharts = [];
 let groupBPieCharts = [];
 function renderInsightsPieGroup(containerId, rec, points, chartArrayRef){
@@ -1429,8 +1423,8 @@ function insightsCategoryOf(it){
 }
 
 // Тот же набор категорий используется и для диаграмм на вкладке инсайтов
-// ("Категории стекла по точкам", Группа А, Группа Б) — чтобы диаграммы и
-// текстовый список инсайдов ниже показывали одну и ту же группировку.
+// (Группа А, Группа Б) — чтобы диаграммы и текстовый список инсайдов ниже
+// показывали одну и ту же группировку.
 const INSIGHTS_CHART_CATS = ["Стекло","Гидрогель","Наушники","Зарядки","USB","Адаптеры","Другие"];
 function aggregateByInsightsCategory(items){
   const m = {}; INSIGHTS_CHART_CATS.forEach(c=>m[c]={qty:0,profit:0,sum:0});
