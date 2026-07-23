@@ -1066,15 +1066,20 @@ const totalLabelsPlugin = {
     if (!opts || !opts.items) return;
     const {ctx} = chart;
     opts.items.forEach(item=>{
-      const xScale = chart.scales[item.xAxisID || "x"];
+      // Подпись рисуется точно над своим столбцом: X берём у реального бара нужного
+      // датасета (а не у общей отметки категории) — иначе при двух столбцах на одну
+      // категорию (₸ и шт) подписи съезжают и накладываются друг на друга.
+      const meta = chart.getDatasetMeta(item.datasetIndex);
+      const bar = meta && meta.data[item.index];
+      if (!bar) return;
       const yScale = chart.scales[item.yAxisID || "y"];
-      if (!xScale || !yScale) return;
-      const x = xScale.getPixelForValue(item.index);
+      if (!yScale) return;
+      const x = bar.x;
       const y = yScale.getPixelForValue(item.value) - 10;
       ctx.save();
       ctx.font = "bold 11px Arial";
       const w = ctx.measureText(item.text).width;
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
       ctx.fillRect(x-w/2-4, y-9, w+8, 16);
       ctx.fillStyle = "#1f2937";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1085,9 +1090,20 @@ const totalLabelsPlugin = {
 };
 Chart.register(totalLabelsPlugin);
 
+// Индексы датасетов-"якорей" для подписи над каждым столбцом (первый датасет своей стопки —
+// его x-координата совпадает с координатой всей стопки независимо от значения).
+// Порядок датасетов: 7 подкатегорий стекла (₸,шт каждая) = 0..13, Чехлы (₸,шт) = 14,15,
+// 4 подкатегории товаров (₸,шт каждая) = 16..23.
+const GLASS_DS_COUNT = GLASS_SUBCATS.length * 2;
+const CASE_PROFIT_DS = GLASS_DS_COUNT;
+const CASE_QTY_DS = GLASS_DS_COUNT + 1;
+const GOODS_PROFIT_DS = GLASS_DS_COUNT + 2;
+const GOODS_QTY_DS = GLASS_DS_COUNT + 3;
+
 // Цвета — классические, хорошо различимые (не оттенки одного тона), чтобы диаграмма
 // читалась с первого взгляда: у каждой подкатегории свой чёткий цвет.
-function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub){
+function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showTotalLabels){
+  if (showTotalLabels === undefined) showTotalLabels = true;
   const ctx = document.getElementById(canvasId);
   const labels = ["Стекло","Чехлы","Товары"];
   const datasets = [];
@@ -1112,19 +1128,19 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub){
     data:{ labels, datasets },
     options:{
       responsive:true, maintainAspectRatio:false,
-      layout:{ padding:{top:24} },
+      layout:{ padding:{top: showTotalLabels ? 24 : 8} },
       plugins:{
         legend:{ display:true, labels:{ filter: item => !item.text.includes("(шт)"), font:{size:10} } },
         title:{display:false},
         tooltip:{ enabled:true, callbacks:{ label: (c)=> `${c.dataset.label}: ${fmt(c.raw)}` } },
-        totalLabels:{ items:[
-          { index:0, yAxisID:"y", value: glassTotal.profit, text: fmt(glassTotal.profit) },
-          { index:1, yAxisID:"y", value: caseTotal.profit, text: fmt(caseTotal.profit) },
-          { index:2, yAxisID:"y", value: goodsTotal.profit, text: fmt(goodsTotal.profit) },
-          { index:0, yAxisID:"y1", value: glassTotal.qty, text: fmtQtySum(glassTotal.qty, glassTotal.sum) },
-          { index:1, yAxisID:"y1", value: caseTotal.qty, text: fmtQtySum(caseTotal.qty, caseTotal.sum) },
-          { index:2, yAxisID:"y1", value: goodsTotal.qty, text: fmtQtySum(goodsTotal.qty, goodsTotal.sum) },
-        ] }
+        totalLabels: showTotalLabels ? { items:[
+          { datasetIndex:0, index:0, yAxisID:"y", value: glassTotal.profit, text: fmt(glassTotal.profit) },
+          { datasetIndex:CASE_PROFIT_DS, index:1, yAxisID:"y", value: caseTotal.profit, text: fmt(caseTotal.profit) },
+          { datasetIndex:GOODS_PROFIT_DS, index:2, yAxisID:"y", value: goodsTotal.profit, text: fmt(goodsTotal.profit) },
+          { datasetIndex:1, index:0, yAxisID:"y1", value: glassTotal.qty, text: fmtQtySum(glassTotal.qty, glassTotal.sum) },
+          { datasetIndex:CASE_QTY_DS, index:1, yAxisID:"y1", value: caseTotal.qty, text: fmtQtySum(caseTotal.qty, caseTotal.sum) },
+          { datasetIndex:GOODS_QTY_DS, index:2, yAxisID:"y1", value: goodsTotal.qty, text: fmtQtySum(goodsTotal.qty, goodsTotal.sum) },
+        ] } : { items: [] }
       },
       scales:{
         x:{ stacked:true, ticks:{font:{size:11}} },
@@ -1135,10 +1151,10 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub){
   });
 }
 
-// По каждой точке — та же структура графика, что и в "Сеть в целом" (прибыль и шт/сумма
-// по тем же 3 группам, тот же порядок и цвета), чтобы графики были одинаковыми и понятными.
+// По каждой точке — тот же график, что и в "Сеть в целом" (те же 3 группы, те же цвета),
+// но без подписей общих сумм над столбцами — тут они не нужны (только у сети в целом).
 function makePointChart(canvasId, glassBySub, caseTotal, goodsBySub){
-  return makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub);
+  return makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, false);
 }
 
 
