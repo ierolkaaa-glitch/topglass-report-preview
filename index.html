@@ -1487,10 +1487,13 @@ const POINT_GROUPS = {
 // Чехлы не сравниваем — для них есть отдельный блок "Соотношение стёкол и чехлов".
 const INSIGHTS_STECLO_CATS = new Set([...GLASS_SUBCATS, "Другое стекло", "Матовое стекло", "Линза на камеры", "Skin"]);
 INSIGHTS_STECLO_CATS.delete("Гидрогель");
-function insightsCategoryOf(it){
+// Инсайды сравниваются по каждому подвиду отдельно (5D отдельно от 6D, Наушники отдельно
+// от USB и т.д.) — категория (Стекло/Гидрогель/Наушники/...) используется только для
+// фильтра внизу, а не для объединения подвидов в общую сумму.
+function insightsSubtypeOf(it){
   if (it.cat === "ЧЕХЛЫ") return null;
   if (it.cat === "Гидрогель") return "Гидрогель";
-  if (INSIGHTS_STECLO_CATS.has(it.cat)) return "Стекло";
+  if (INSIGHTS_STECLO_CATS.has(it.cat)) return it.cat;
   if (it.cat === "ТОВАРЫ"){
     const sub = classifyGoods(it.name);
     if (sub === "Другие" && normalizeItemName(it.name).includes("адаптер")) return "Адаптеры";
@@ -1498,34 +1501,25 @@ function insightsCategoryOf(it){
   }
   return null;
 }
-
-// Тот же набор категорий используется и для диаграмм на вкладке инсайтов
-// (Группа А, Группа Б) — чтобы диаграммы и текстовый список инсайдов ниже
-// показывали одну и ту же группировку.
-const INSIGHTS_CHART_CATS = ["Стекло","Гидрогель","Наушники","Зарядки","USB","Адаптеры","Другие"];
-function aggregateByInsightsCategory(items){
-  const m = {}; INSIGHTS_CHART_CATS.forEach(c=>m[c]={qty:0,profit:0,sum:0});
-  for (const it of items){
-    const cat = insightsCategoryOf(it);
-    if (!cat || !m[cat]) continue;
-    m[cat].qty += it.qty; m[cat].profit += it.profit; m[cat].sum += (it.sum||0);
-  }
-  return m;
+function insightsFilterCategoryOf(subtype){
+  if (subtype === "Гидрогель") return "Гидрогель";
+  if (["Наушники","Зарядки","USB","Адаптеры","Другие"].includes(subtype)) return subtype;
+  return "Стекло";
 }
 
 function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
   const pointsWithData = groupPoints.filter(p=>rec.points[p]);
-  const byCat = {};
+  const bySub = {};
   for (const p of pointsWithData){
     for (const it of rec.points[p]){
-      const cat = insightsCategoryOf(it);
-      if (!cat) continue;
-      if (!byCat[cat]) byCat[cat] = {};
-      byCat[cat][p] = (byCat[cat][p]||0) + it.qty;
+      const sub = insightsSubtypeOf(it);
+      if (!sub) continue;
+      if (!bySub[sub]) bySub[sub] = {};
+      bySub[sub][p] = (bySub[sub][p]||0) + it.qty;
     }
   }
   const insights = [];
-  for (const [name, vals] of Object.entries(byCat)){
+  for (const [name, vals] of Object.entries(bySub)){
     const full = {}; pointsWithData.forEach(p=>full[p]=vals[p]||0);
     const entries = Object.entries(full);
     if (entries.length < 2) continue;
@@ -1535,7 +1529,7 @@ function computeGroupInsights(rec, groupPoints, ratioThresh, diffThresh){
     if (maxP[1] === 0) continue;
     const ratio = minP[1]>0 ? maxP[1]/minP[1] : Infinity;
     if (diff >= diffThresh && (ratio === Infinity || ratio >= ratioThresh)){
-      insights.push({name, maxP, minP, diff, ratio});
+      insights.push({name, filterCat: insightsFilterCategoryOf(name), maxP, minP, diff, ratio});
     }
   }
   insights.sort((a,b)=>b.diff-a.diff);
@@ -1561,8 +1555,8 @@ function renderInsightsList(){
   let topA = computeGroupInsights(rec, POINT_GROUPS["Группа А"], ratioThresh, diffThresh);
   let topB = computeGroupInsights(rec, POINT_GROUPS["Группа Б"], ratioThresh, diffThresh);
   if (catFilter){
-    topA = topA.filter(ins=>ins.name === catFilter);
-    topB = topB.filter(ins=>ins.name === catFilter);
+    topA = topA.filter(ins=>ins.filterCat === catFilter);
+    topB = topB.filter(ins=>ins.filterCat === catFilter);
   }
   renderInsightsGroupList("insights-list-a", topA);
   renderInsightsGroupList("insights-list-b", topB);
