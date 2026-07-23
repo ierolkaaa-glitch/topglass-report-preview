@@ -1291,7 +1291,7 @@ function renderCatCompareChart(rec){
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
     const agg = aggregateByInsightsCategory(rec.points[p]);
-    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].qty), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (catCompareChart) catCompareChart.destroy();
   catCompareChart = new Chart(document.getElementById("chart-cat-compare"), {
@@ -1369,7 +1369,7 @@ function renderGroupChart(rec, groupPoints, canvasId, chartVarName){
   const pointsWithData = groupPoints.filter(p=>rec.points[p]);
   const datasets = pointsWithData.map((p,i)=>{
     const agg = aggregateByInsightsCategory(rec.points[p]);
-    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].qty), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
+    return { label:p, data: INSIGHTS_CHART_CATS.map(c=>agg[c].profit), backgroundColor: POINT_COLORS[i%POINT_COLORS.length] };
   });
   if (chartVarName === "groupAChart"){
     if (groupAChart) groupAChart.destroy();
