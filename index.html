@@ -154,6 +154,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .pie-item{display:flex; flex-direction:column; align-items:stretch;}
   .pie-item h4{font-size:12px; text-align:center; margin:0 0 6px; color:var(--text);}
   .pie-item-wrap{position:relative; height:200px;}
+  .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .modal-box{background:var(--card); border-radius:10px; padding:20px 22px; width:100%; max-width:800px; max-height:90vh; overflow:auto; box-shadow:0 4px 24px rgba(0,0,0,.25);}
+  .modal-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
   .point-section{border-top:3px solid var(--accent); margin-top:22px; padding-top:14px;}
   .point-section h3.point-title{font-size:16px; color:var(--accent); margin:0 0 12px;}
   .goods-section{border-top:3px solid var(--green);}
@@ -252,12 +255,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
       </div>
       <div class="card">
-        <h2>Группа А: ШР, АЦ, КС, ЖГ (между собой)</h2>
-        <div class="pie-grid" id="pie-grid-groupa"></div>
-      </div>
-      <div class="card">
-        <h2>Группа Б: ХБК, ВОКЗ/ЖД, ОРАЛ, ХРОМ (между собой)</h2>
-        <div class="pie-grid" id="pie-grid-groupb"></div>
+        <h2>Стёкла и товары по точкам</h2>
+        <p class="muted" style="margin-top:-6px;">Нажмите на диаграмму, чтобы посмотреть разбивку по подвидам.</p>
+        <div class="grid2">
+          <div>
+            <h3>Стёкла (шт)</h3>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-glass-by-point"></canvas></div>
+          </div>
+          <div>
+            <h3>Товары (шт)</h3>
+            <div class="chart-wrap" style="height:300px; cursor:pointer;"><canvas id="chart-goods-by-point"></canvas></div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>Инсайты: где продаётся заметно больше/меньше</h2>
@@ -289,6 +298,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
       </div>
     </section>
+
+    <!-- DRILL-DOWN MODAL (разбивка по подвидам стёкол/товаров) -->
+    <div id="drill-modal-overlay" class="modal-overlay" style="display:none;">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h2 id="drill-modal-title" style="margin:0;">Подробнее</h2>
+          <button class="btn" id="drill-modal-close">Закрыть</button>
+        </div>
+        <div class="chart-wrap" style="height:420px;"><canvas id="drill-modal-chart"></canvas></div>
+      </div>
+    </div>
 
     <!-- BACKUP TAB -->
     <section class="tab-panel" id="tab-backup">
@@ -1280,65 +1300,86 @@ async function loadInsightsTab(){
   const rec = await localGetMonth(month);
   currentInsightsData = rec;
   renderGlassCaseChart(rec);
-  renderInsightsPieGroup("pie-grid-groupa", rec, POINT_GROUPS["Группа А"], groupAPieCharts);
-  renderInsightsPieGroup("pie-grid-groupb", rec, POINT_GROUPS["Группа Б"], groupBPieCharts);
+  renderGlassGoodsByPoint(rec);
   renderInsightsList();
 }
 
-// Круговые диаграммы по категориям инсайдов: для каждой из 7 категорий — одна
-// круговая диаграмма, где доли — это точки (в штуках). points — список точек,
-// которые нужно учитывать (все точки сети, либо только точки одной группы).
-// chartArrayRef — массив, в котором хранятся созданные Chart-инстансы этого
-// набора, чтобы их можно было уничтожить перед перерисовкой.
-let groupAPieCharts = [];
-let groupBPieCharts = [];
-function renderInsightsPieGroup(containerId, rec, points, chartArrayRef){
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  chartArrayRef.forEach(ch=>ch.destroy());
-  chartArrayRef.length = 0;
-  container.innerHTML = "";
-  const pointsWithData = points.filter(p=>rec.points[p]);
-  const pointColors = pointsWithData.map((p,i)=>POINT_COLORS[i%POINT_COLORS.length]);
-  INSIGHTS_CHART_CATS.forEach(cat=>{
-    const data = pointsWithData.map(p=>{
-      let s = 0;
-      for (const it of rec.points[p]){ if (insightsCategoryOf(it) === cat) s += it.qty; }
-      return s;
-    });
-    const total = data.reduce((a,b)=>a+b,0);
-    const item = document.createElement("div");
-    item.className = "pie-item";
-    const title = document.createElement("h4");
-    title.textContent = cat;
-    const wrap = document.createElement("div");
-    wrap.className = "pie-item-wrap";
-    const canvas = document.createElement("canvas");
-    wrap.appendChild(canvas);
-    item.appendChild(title);
-    item.appendChild(wrap);
-    container.appendChild(item);
-    if (total === 0){
-      wrap.innerHTML = "<p class='muted' style='text-align:center;margin-top:70px;'>Нет продаж</p>";
-      return;
+// Две диаграммы "Стёкла" и "Товары" по всем точкам сети (в штуках). Клик по любой из
+// диаграмм открывает модальное окно с разбивкой по подвидам (для стёкол — 5D/6D/18D/
+// Приват/Гидрогель и т.д., для товаров — Наушники/Зарядки/USB/Другие) по тем же точкам.
+let glassByPointChart = null;
+let goodsByPointChart = null;
+function renderGlassGoodsByPoint(rec){
+  const pointsWithData = POINTS.filter(p=>rec.points[p]);
+  const glassQtyData = [], goodsQtyData = [], glassSumData = [], goodsSumData = [];
+  pointsWithData.forEach(p=>{
+    const items = rec.points[p];
+    let gQty=0, gSum=0, tQty=0, tSum=0;
+    for (const it of items){
+      if (GLASS_SUBCATS.includes(it.cat)){ gQty += it.qty; gSum += (it.sum||0); }
+      else if (it.cat === "ТОВАРЫ"){ tQty += it.qty; tSum += (it.sum||0); }
     }
-    const chart = new Chart(canvas, {
-      type:"pie",
-      data:{ labels: pointsWithData, datasets:[{ data, backgroundColor: pointColors }] },
-      options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{
-          legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:9}, padding:6 } },
-          tooltip:{ callbacks:{ label:(c)=>{
-            const pct = total>0 ? (c.raw/total*100).toFixed(1) : 0;
-            return `${c.label}: ${fmt(c.raw)} шт (${pct}%)`;
-          } } }
-        }
-      }
-    });
-    chartArrayRef.push(chart);
+    glassQtyData.push(gQty); glassSumData.push(gSum);
+    goodsQtyData.push(tQty); goodsSumData.push(tSum);
+  });
+  const pointColors = pointsWithData.map((p,i)=>POINT_COLORS[i%POINT_COLORS.length]);
+  const makeTooltip = (sumArr)=>({ callbacks:{ label:(c)=> fmtQtySum(c.raw, sumArr[c.dataIndex]||0) } });
+
+  if (glassByPointChart) glassByPointChart.destroy();
+  glassByPointChart = new Chart(document.getElementById("chart-glass-by-point"), {
+    type:"bar",
+    data:{ labels: pointsWithData, datasets:[{ label:"Стёкла", data: glassQtyData, backgroundColor: pointColors }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, onClick: ()=>openDrillModal("glass", rec, pointsWithData),
+      plugins:{ legend:{display:false}, tooltip: makeTooltip(glassSumData) },
+      scales:{ y:{ ticks:{display:false}, grid:{display:false} } }
+    }
+  });
+  if (goodsByPointChart) goodsByPointChart.destroy();
+  goodsByPointChart = new Chart(document.getElementById("chart-goods-by-point"), {
+    type:"bar",
+    data:{ labels: pointsWithData, datasets:[{ label:"Товары", data: goodsQtyData, backgroundColor: pointColors }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, onClick: ()=>openDrillModal("goods", rec, pointsWithData),
+      plugins:{ legend:{display:false}, tooltip: makeTooltip(goodsSumData) },
+      scales:{ y:{ ticks:{display:false}, grid:{display:false} } }
+    }
   });
 }
+
+// Модальное окно с разбивкой по подвидам: группированные столбики — по одному
+// цвету на каждый подвид (5D/6D/18D/... или Наушники/Зарядки/USB/Другие), точки сети
+// на оси X, чтобы было видно, из чего складывается "Стёкла"/"Товары" на каждой точке.
+let drillModalChart = null;
+function openDrillModal(kind, rec, pointsWithData){
+  const subcats = kind === "glass" ? GLASS_SUBCATS : GOODS_SUBCATS;
+  const colors = kind === "glass" ? GLASS_SUBCAT_COLORS : GOODS_SUBCAT_COLORS;
+  document.getElementById("drill-modal-title").textContent = kind === "glass" ? "Стёкла по подвидам" : "Товары по подвидам";
+  const datasets = subcats.map(sub=>{
+    const data = pointsWithData.map(p=>{
+      let s = 0;
+      for (const it of rec.points[p]){
+        if (kind === "glass"){ if (it.cat === sub) s += it.qty; }
+        else { if (it.cat === "ТОВАРЫ" && classifyGoods(it.name) === sub) s += it.qty; }
+      }
+      return s;
+    });
+    return { label: sub, data, backgroundColor: colors[sub] };
+  });
+  if (drillModalChart) drillModalChart.destroy();
+  drillModalChart = new Chart(document.getElementById("drill-modal-chart"), {
+    type:"bar",
+    data:{ labels: pointsWithData, datasets },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:"bottom"} }, scales:{ y:{ beginAtZero:true } } }
+  });
+  document.getElementById("drill-modal-overlay").style.display = "flex";
+}
+document.getElementById("drill-modal-close").addEventListener("click", ()=>{
+  document.getElementById("drill-modal-overlay").style.display = "none";
+});
+document.getElementById("drill-modal-overlay").addEventListener("click", (e)=>{
+  if (e.target.id === "drill-modal-overlay") document.getElementById("drill-modal-overlay").style.display = "none";
+});
 
 // Стёкла для этого соотношения — все категории стекла КРОМЕ Гидрогеля (Skin и линзы на
 // камеры сюда изначально не входят, см. GLASS_RATIO_CATS). Чехлы — категория "ЧЕХЛЫ", все
