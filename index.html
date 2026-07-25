@@ -511,7 +511,15 @@ function guessGlassSubcatFromName(n){
 function mapCatalogEntryToCategory(name, category, subcat){
   const n = normalizeItemName(name);
   const cat = String(category||"").trim();
+  const catLower = cat.toLowerCase();
   const sub = String(subcat||"").trim();
+  // Регистронезависимая и допускающая небольшие расхождения проверка на "чехлы" — в
+  // справочнике категория встречалась в разных написаниях ("Чехлы для телефонов", возможно
+  // с другим регистром, числом (чехол/чехлы) или без слова "телефонов"), из-за чего точное
+  // сравнение cat==="Чехлы для телефонов" пропускало часть строк, и они уходили в "ТОВАРЫ"
+  // вместо "ЧЕХЛЫ" — отсюда недосчёт по категории ЧЕХЛЫ в отчёте. "чех" достаточно короткий
+  // корень, чтобы поймать чехол/чехлы/чехла и т.п., и не пересекается с другими категориями.
+  if (catLower.includes("чех")) return { cat: "ЧЕХЛЫ" };
   if (cat === "Стекло"){
     if (sub === "Стекло 5D") return { cat: "5D" };
     if (sub === "Стекло 6D") return { cat: "6D" };
@@ -523,13 +531,12 @@ function mapCatalogEntryToCategory(name, category, subcat){
     if (sub.toLowerCase().includes("гидрогель") || sub.toLowerCase().includes("skin")){
       return { cat: n.includes("гидрогель") ? "Гидрогель" : "Skin" };
     }
-    // Подкатегория пустая или не распознана явно — пробуем угадать подтип по названию
-    // (5D/6D/18D/по 270/по 1490-1500/приват), и только если ничего не подошло — "Другое
-    // стекло". guessedByPriceHint=true помечает случай "нет явных признаков в названии",
-    // чтобы classify() мог доопределить его как Приват по цене продажи 950 (см. ниже).
+    // Подкатегория пустая или не распознана явно — определяем подтип по названию
+    // (5D/6D/18D/по 270/по 1490-1500/приват). Если ни один признак не подошёл — "Другое
+    // стекло" (по цене продажи больше не определяем — только по названию).
     const guessed = guessGlassSubcatFromName(n);
     if (guessed) return { cat: guessed };
-    return { cat: "Другое стекло", guessedByPriceHint: true };
+    return { cat: "Другое стекло" };
   }
   if (cat === "Чехлы для телефонов") return { cat: "ЧЕХЛЫ" };
   if (cat === "USB") return { cat: "ТОВАРЫ", goodsSub: "USB" };
@@ -569,18 +576,9 @@ function lookupCatalog(name, barcode){
   return null;
 }
 
-// unitPrice (необязателен) — цена продажи за 1 шт (сумма продаж / кол-во) конкретной строки
-// отчёта. Используется только для стёкол из справочника без распознанной подкатегории
-// (см. guessedByPriceHint в mapCatalogEntryToCategory): если цена за штуку равна 950 —
-// считаем это "Приват" (продавцы называют так стёкла по 950, даже если слова "приват" в
-// названии нет). Без unitPrice (например, при показе одного товара без контекста строки)
-// эта проверка просто не применяется — товар остаётся "Другое стекло".
 function classify(name, barcode, unitPrice){
   const fromCatalog = lookupCatalog(name, barcode);
-  if (fromCatalog){
-    if (fromCatalog.guessedByPriceHint && unitPrice === 950) return "Приват";
-    return fromCatalog.cat;
-  }
+  if (fromCatalog) return fromCatalog.cat;
   const n = normalizeItemName(name);
   const mapped = NAME_CATEGORY_MAP[n];
   if (mapped) return mapped;
@@ -600,7 +598,10 @@ function classify(name, barcode, unitPrice){
   }
   if (n.includes("гидрогель")) return "Гидрогель";
   if (n.includes("линза")) return "Линза на камеры";
-  if (n.includes("чехол") || n.includes("чехл")) return "ЧЕХЛЫ";
+  // "силикон" — в справочнике все такие позиции являются силиконовыми чехлами (ни одна не
+  // содержит слово "чехол" в названии), поэтому распознаём их как ЧЕХЛЫ и здесь, для товаров,
+  // которых нет в справочнике/без штрихкода.
+  if (n.includes("чехол") || n.includes("чехл") || n.includes("силикон")) return "ЧЕХЛЫ";
   return "ТОВАРЫ";
 }
 
@@ -654,11 +655,13 @@ function detectPoint(filename){
   return null;
 }
 
-// Позиции, которые не нужно учитывать нигде (не сравнимые товары/услуги):
-// силикон (обезличенный товар) и установка стекла (услуга, не сам товар).
+// Позиции, которые не нужно учитывать нигде — только услуги/не сам товар (установка стекла).
+// РАНЬШЕ сюда же попадал "силикон" как "обезличенный товар", но по данным справочника
+// (Наименование-Категория.xlsx) все позиции с "силикон" в названии — это силиконовые чехлы
+// (категория "Чехлы для телефонов", 425 позиций), и полное исключение таких строк приводило
+// к недосчёту сумм именно по категории ЧЕХЛЫ (обнаружено пользователем на примере ЖГ/май).
 function isExcludedItem(name){
   const n = name.toLowerCase();
-  if (n.includes("силикон")) return true;
   if (n.includes("стекл") && n.includes("установ")) return true;
   return false;
 }
