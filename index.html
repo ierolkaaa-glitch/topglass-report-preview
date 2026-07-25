@@ -1387,6 +1387,7 @@ function renderReport(rec){
     const goodsTotal = sumQtyProfit(goodsBySub);
     const grandQty = glassTotal.qty + caseTotal.qty + goodsTotal.qty;
     const grandProfit = glassTotal.profit + caseTotal.profit + goodsTotal.profit;
+    const grandSum = glassTotal.sum + caseTotal.sum + goodsTotal.sum;
 
     const top5Qty = topN(goodsItems, "qty");
     const top5Profit = topN(goodsItems, "profit");
@@ -1397,6 +1398,7 @@ function renderReport(rec){
     card.className = "card point-section";
     card.innerHTML = `
       <h3 class="point-title">${p}</h3>
+      <p class="muted" style="margin:10px 0;">Прибыль по ${p}: ${fmt(grandProfit)} ₸ — всего продано ${fmtQtySum(grandQty, grandSum)}</p>
       <div class="grid2">
         <div>
           <table>
