@@ -304,6 +304,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <option value="Стекло">Стекло</option>
             <option value="Гидрогель">Гидрогель</option>
             <option value="Наушники">Наушники</option>
+            <option value="Беспроводные наушники">Беспроводные наушники</option>
             <option value="Зарядки">Зарядки</option>
             <option value="USB">USB</option>
             <option value="Адаптеры">Адаптеры</option>
@@ -410,8 +411,8 @@ const GLASS_SUBCAT_COLORS = {
 const CASE_COLOR = "#8B4513";
 const GOODS_COLOR = "#264478";
 // Подкатегории "Товаров" (всё, что не стекло и не чехлы) — только для отчёта за месяц.
-const GOODS_SUBCATS = ["Наушники","Зарядки","USB","Другие"];
-const GOODS_SUBCAT_COLORS = { "Наушники":"#FF66CC", "Зарядки":"#264478", "USB":"#00B0F0", "Другие":"#A6A6A6" };
+const GOODS_SUBCATS = ["Наушники","Беспроводные наушники","Зарядки","USB","Адаптеры","Другие"];
+const GOODS_SUBCAT_COLORS = { "Наушники":"#FF66CC", "Беспроводные наушники":"#C00080", "Зарядки":"#264478", "USB":"#00B0F0", "Адаптеры":"#92D050", "Другие":"#A6A6A6" };
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -463,10 +464,16 @@ const GOODS_SUBCAT_MAP = {"aipods по 3900":"Наушники","usb по 300":"
 
 function classifyGoods(name){
   const n = normalizeItemName(name);
+  // Премиальные беспроводные наушники — отдельная категория, проверяется раньше справочника
+  // и общего правила "Наушники": AirPods Pro / Lux / 3 Lux / Max, Tesna Buds / Pro.
+  if (n.includes("airpods pro") || n.includes("airpods max") || (n.includes("airpods") && n.includes("lux")) || n.includes("tesna buds") || n.includes("tesna pro")) return "Беспроводные наушники";
+  // Адаптеры питания (Apple/20w/35w и т.д.) — отдельная категория, тоже проверяется раньше
+  // справочника, чтобы не зависеть от того, что там записано для конкретного названия.
+  if (n.includes("адаптер")) return "Адаптеры";
   const mapped = GOODS_SUBCAT_MAP[n];
   if (mapped) return mapped;
   if (n.includes("наушник") || n.includes("airpods") || n.includes("гарнитур")) return "Наушники";
-  if (n.includes("зарядк") || n.includes("зу ") || n.includes("блок питания") || n.includes("адаптер питания")) return "Зарядки";
+  if (n.includes("зарядк") || n.includes("зу ") || n.includes("блок питания")) return "Зарядки";
   if (n.includes("usb") || n.includes("юсб") || n.includes("type-c") || n.includes("lightning")) return "USB";
   return "Другие";
 }
@@ -971,22 +978,26 @@ function addTotals(items){
 function fmtQtySum(qty, sum){
   return `${fmt(qty)} шт / ${fmt(sum)} ₸`;
 }
-function buildDetailPanelHtml(glassBySub, goodsBySub){
+// grandTotal — {profit, qty} по всей карточке (Стекло + Чехлы + Товары вместе), от него
+// считаются "% прибыли" и "% шт" для каждой строки — сколько эта подкатегория составляет
+// от ОБЩЕЙ прибыли/продаж карточки (сети или конкретной точки), а не только от своего блока.
+function buildDetailPanelHtml(glassBySub, goodsBySub, grandTotal){
+  const pctOf = (num, den)=> den ? `${(num/den*100).toFixed(1)}%` : "0.0%";
   const glassRows = GLASS_SUBCATS.filter(c=>glassBySub[c] && (glassBySub[c].qty || glassBySub[c].profit || glassBySub[c].sum))
     .sort((a,b)=>glassBySub[b].profit-glassBySub[a].profit)
-    .map(c=>`<tr><td><span class="dot" style="background:${GLASS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(glassBySub[c].profit)}</td><td class="num">${fmtQtySum(glassBySub[c].qty, glassBySub[c].sum)}</td></tr>`).join("");
+    .map(c=>`<tr><td><span class="dot" style="background:${GLASS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(glassBySub[c].profit)}</td><td class="num">${pctOf(glassBySub[c].profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(glassBySub[c].qty, glassBySub[c].sum)}</td><td class="num">${pctOf(glassBySub[c].qty, grandTotal.qty)}</td></tr>`).join("");
   const goodsRows = GOODS_SUBCATS.filter(c=>goodsBySub[c] && (goodsBySub[c].qty || goodsBySub[c].profit || goodsBySub[c].sum))
     .sort((a,b)=>goodsBySub[b].profit-goodsBySub[a].profit)
-    .map(c=>`<tr><td><span class="dot" style="background:${GOODS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(goodsBySub[c].profit)}</td><td class="num">${fmtQtySum(goodsBySub[c].qty, goodsBySub[c].sum)}</td></tr>`).join("");
+    .map(c=>`<tr><td><span class="dot" style="background:${GOODS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(goodsBySub[c].profit)}</td><td class="num">${pctOf(goodsBySub[c].profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(goodsBySub[c].qty, goodsBySub[c].sum)}</td><td class="num">${pctOf(goodsBySub[c].qty, grandTotal.qty)}</td></tr>`).join("");
   return `
     <div class="grid2">
       <div>
         <h4>Стекло по категориям</h4>
-        <table><tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th></tr>${glassRows || '<tr><td colspan=3>—</td></tr>'}</table>
+        <table><tr><th>Категория</th><th>Прибыль, ₸</th><th>% прибыли</th><th>Шт / Сумма, ₸</th><th>% шт</th></tr>${glassRows || '<tr><td colspan=5>—</td></tr>'}</table>
       </div>
       <div>
         <h4>Товары по категориям</h4>
-        <table><tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th></tr>${goodsRows || '<tr><td colspan=3>—</td></tr>'}</table>
+        <table><tr><th>Категория</th><th>Прибыль, ₸</th><th>% прибыли</th><th>Шт / Сумма, ₸</th><th>% шт</th></tr>${goodsRows || '<tr><td colspan=5>—</td></tr>'}</table>
       </div>
     </div>`;
 }
@@ -1011,6 +1022,7 @@ function renderReport(rec){
   networkCard.innerHTML = `<h2>Сеть в целом — ${rec.monthLabel}</h2>
     <h3>Прибыль и продажи по категориям</h3>
     <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>
+    <p class="muted" id="net-total-summary" style="margin:10px 0;"></p>
     <table>
       <tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th><th>Процент по шт</th></tr>
       <tbody id="net-summary-tbody"></tbody>
@@ -1026,11 +1038,14 @@ function renderReport(rec){
   const netCaseTotal = addTotals(allNetworkItems.filter(it=>it.cat==="ЧЕХЛЫ"));
   const netGoodsTotal = sumQtyProfit(netGoodsBySub);
   const netGrandQty = netGlassTotal.qty + netCaseTotal.qty + netGoodsTotal.qty;
+  const netGrandProfit = netGlassTotal.profit + netCaseTotal.profit + netGoodsTotal.profit;
+  const netGrandSum = netGlassTotal.sum + netCaseTotal.sum + netGoodsTotal.sum;
 
+  networkCard.querySelector("#net-total-summary").textContent = `Общая прибыль по сети: ${fmt(netGrandProfit)} ₸ — всего продано ${fmtQtySum(netGrandQty, netGrandSum)}`;
   networkCard.querySelector("#net-summary-tbody").innerHTML = [
     ["Стекло", netGlassTotal], ["Чехлы", netCaseTotal], ["Товары", netGoodsTotal],
   ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty, t.sum)}</td><td class="num">${netGrandQty ? (t.qty/netGrandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
-  networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub);
+  networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub, {profit: netGrandProfit, qty: netGrandQty});
   wireDetailToggle(networkCard);
 
   reportCharts.push(makeCombinedNetChart("net-combined-chart", netGlassBySub, netCaseTotal, netGoodsBySub));
@@ -1044,6 +1059,7 @@ function renderReport(rec){
     const caseTotal = addTotals(items.filter(it=>it.cat==="ЧЕХЛЫ"));
     const goodsTotal = sumQtyProfit(goodsBySub);
     const grandQty = glassTotal.qty + caseTotal.qty + goodsTotal.qty;
+    const grandProfit = glassTotal.profit + caseTotal.profit + goodsTotal.profit;
 
     const top5Qty = topN(goodsItems, "qty");
     const top5Profit = topN(goodsItems, "profit");
@@ -1061,7 +1077,7 @@ function renderReport(rec){
             ${[["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].map(([label,t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty,t.sum)}</td><td class="num">${grandQty ? (t.qty/grandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("")}
           </table>
           <button class="btn-link toggle-detail" data-target="${detailId}">Подробнее ▾</button>
-          <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub)}</div>
+          <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub, {profit: grandProfit, qty: grandQty})}</div>
         </div>
         <div class="chart-wrap"><canvas id="${chartId}"></canvas></div>
       </div>
@@ -1169,6 +1185,12 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
 
   const glassTotal = sumQtyProfit(glassBySub);
   const goodsTotal = sumQtyProfit(goodsBySub);
+  // Проценты в подписях над столбцами — от ОБЩЕЙ прибыли/продаж карточки (Стекло+Чехлы+Товары
+  // вместе), а не только от своей колонки — так сразу видно долю каждой категории в целом.
+  const grandProfitForPct = glassTotal.profit + caseTotal.profit + goodsTotal.profit;
+  const grandQtyForPct = glassTotal.qty + caseTotal.qty + goodsTotal.qty;
+  const pctProfit = v => grandProfitForPct ? ` (${(v/grandProfitForPct*100).toFixed(1)}%)` : "";
+  const pctQty = v => grandQtyForPct ? ` (${(v/grandQtyForPct*100).toFixed(1)}%)` : "";
 
   return new Chart(ctx, {
     type:"bar",
@@ -1189,12 +1211,12 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
           return `${c.dataset.label}: ${fmt(c.raw)}`;
         } } },
         totalLabels: showTotalLabels ? { items:[
-          { datasetIndex:0, index:0, yAxisID:"y", value: glassTotal.profit, text: fmt(glassTotal.profit) },
-          { datasetIndex:CASE_PROFIT_DS, index:1, yAxisID:"y", value: caseTotal.profit, text: fmt(caseTotal.profit) },
-          { datasetIndex:GOODS_PROFIT_DS, index:2, yAxisID:"y", value: goodsTotal.profit, text: fmt(goodsTotal.profit) },
-          { datasetIndex:1, index:0, yAxisID:"y1", value: glassTotal.qty, text: fmtQtySum(glassTotal.qty, glassTotal.sum) },
-          { datasetIndex:CASE_QTY_DS, index:1, yAxisID:"y1", value: caseTotal.qty, text: fmtQtySum(caseTotal.qty, caseTotal.sum) },
-          { datasetIndex:GOODS_QTY_DS, index:2, yAxisID:"y1", value: goodsTotal.qty, text: fmtQtySum(goodsTotal.qty, goodsTotal.sum) },
+          { datasetIndex:0, index:0, yAxisID:"y", value: glassTotal.profit, text: fmt(glassTotal.profit)+pctProfit(glassTotal.profit) },
+          { datasetIndex:CASE_PROFIT_DS, index:1, yAxisID:"y", value: caseTotal.profit, text: fmt(caseTotal.profit)+pctProfit(caseTotal.profit) },
+          { datasetIndex:GOODS_PROFIT_DS, index:2, yAxisID:"y", value: goodsTotal.profit, text: fmt(goodsTotal.profit)+pctProfit(goodsTotal.profit) },
+          { datasetIndex:1, index:0, yAxisID:"y1", value: glassTotal.qty, text: fmtQtySum(glassTotal.qty, glassTotal.sum)+pctQty(glassTotal.qty) },
+          { datasetIndex:CASE_QTY_DS, index:1, yAxisID:"y1", value: caseTotal.qty, text: fmtQtySum(caseTotal.qty, caseTotal.sum)+pctQty(caseTotal.qty) },
+          { datasetIndex:GOODS_QTY_DS, index:2, yAxisID:"y1", value: goodsTotal.qty, text: fmtQtySum(goodsTotal.qty, goodsTotal.sum)+pctQty(goodsTotal.qty) },
         ] } : { items: [] }
       },
       scales:{
@@ -1498,9 +1520,11 @@ const POINT_GROUPS = {
 // Категории для поиска заметных расхождений между точками — своя, более крупная
 // группировка специально для инсайтов (не путать с категориями отчёта): всё стекло
 // (кроме гидрогеля) объединено в одну "Стекло", Гидрогель — отдельно (включая гидрогель
-// для планшетов/часов/камеры — все они уже определяются как "Гидрогель" в справочнике),
-// "Адаптеры" — отдельная категория только здесь (в отчёте за месяц остаётся "Другие"),
-// Чехлы не сравниваем — для них есть отдельный блок "Соотношение стёкол и чехлов".
+// для планшетов/часов/камеры — все они уже определяются как "Гидрогель" в справочнике).
+// Подкатегории товаров (Наушники/Беспроводные наушники/Зарядки/USB/Адаптеры/Другие) те же,
+// что и в отчёте за месяц — classifyGoods уже сама определяет "Адаптеры" и "Беспроводные
+// наушники" по названию. Чехлы не сравниваем — для них есть отдельный блок "Соотношение
+// стёкол и чехлов".
 const INSIGHTS_STECLO_CATS = new Set([...GLASS_SUBCATS, "Другое стекло", "Матовое стекло", "Линза на камеры", "Skin"]);
 INSIGHTS_STECLO_CATS.delete("Гидрогель");
 // Инсайды сравниваются по каждому подвиду отдельно (5D отдельно от 6D, Наушники отдельно
@@ -1510,16 +1534,12 @@ function insightsSubtypeOf(it){
   if (it.cat === "ЧЕХЛЫ") return null;
   if (it.cat === "Гидрогель") return "Гидрогель";
   if (INSIGHTS_STECLO_CATS.has(it.cat)) return it.cat;
-  if (it.cat === "ТОВАРЫ"){
-    const sub = classifyGoods(it.name);
-    if (sub === "Другие" && normalizeItemName(it.name).includes("адаптер")) return "Адаптеры";
-    return sub;
-  }
+  if (it.cat === "ТОВАРЫ") return classifyGoods(it.name);
   return null;
 }
 function insightsFilterCategoryOf(subtype){
   if (subtype === "Гидрогель") return "Гидрогель";
-  if (["Наушники","Зарядки","USB","Адаптеры","Другие"].includes(subtype)) return subtype;
+  if (GOODS_SUBCATS.includes(subtype)) return subtype;
   return "Стекло";
 }
 
