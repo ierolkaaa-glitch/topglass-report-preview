@@ -1077,10 +1077,10 @@ function renderReport(rec){
             ${[["Стекло",glassTotal],["Чехлы",caseTotal],["Товары",goodsTotal]].map(([label,t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty,t.sum)}</td><td class="num">${grandQty ? (t.qty/grandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("")}
           </table>
           <button class="btn-link toggle-detail" data-target="${detailId}">Подробнее ▾</button>
-          <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub, {profit: grandProfit, qty: grandQty})}</div>
         </div>
         <div class="chart-wrap"><canvas id="${chartId}"></canvas></div>
       </div>
+      <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub, {profit: grandProfit, qty: grandQty})}</div>
       <div class="goods-section point-section">
         <h3 class="point-title">Товары (без стекла и чехлов) — лучшие по прибыли</h3>
         <div class="grid2">
