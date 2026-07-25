@@ -1086,14 +1086,14 @@ function renderReport(rec){
         <div class="grid2">
           <div>
             <h3>Топ-5 по количеству</h3>
-            <table><tr><th>#</th><th>Товар</th><th>Шт / Сумма, ₸</th></tr>
-            ${top5Qty.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmtQtySum(r.qty, r.sum||0)}</td></tr>`).join("") || "<tr><td colspan=3>—</td></tr>"}
+            <table><tr><th>#</th><th>Товар</th><th>Шт / Сумма, ₸</th><th>% шт</th></tr>
+            ${top5Qty.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmtQtySum(r.qty, r.sum||0)}</td><td class="num">${goodsTotal.qty ? (r.qty/goodsTotal.qty*100).toFixed(1) : "0.0"}%</td></tr>`).join("") || "<tr><td colspan=4>—</td></tr>"}
             </table>
           </div>
           <div>
             <h3>Топ-5 по прибыли</h3>
-            <table><tr><th>#</th><th>Товар</th><th>Прибыль, ₸</th></tr>
-            ${top5Profit.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmt(r.profit)}</td></tr>`).join("") || "<tr><td colspan=3>—</td></tr>"}
+            <table><tr><th>#</th><th>Товар</th><th>Прибыль, ₸</th><th>% прибыли</th></tr>
+            ${top5Profit.map((r,idx)=>`<tr><td>${idx+1}</td><td>${r.name}</td><td class="num">${fmt(r.profit)}</td><td class="num">${goodsTotal.profit ? (r.profit/goodsTotal.profit*100).toFixed(1) : "0.0"}%</td></tr>`).join("") || "<tr><td colspan=4>—</td></tr>"}
             </table>
           </div>
         </div>
