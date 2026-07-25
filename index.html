@@ -778,7 +778,7 @@ function pointDocId(monthKey, point){
 
 // Id служебного документа-справочника товаров внутри коллекции "points" (см. localSaveCatalog
 // ниже) — объявлен здесь, до всех функций, которые его используют для фильтрации.
-const CATALOG_DOC_ID = "__catalog__";
+const CATALOG_DOC_ID = "catalog_meta_doc";
 
 async function localListMonths(){
   const snap = await db.collection("points").get();
@@ -855,7 +855,9 @@ async function localRestoreBackup(data){
 }
 
 // Справочник товаров ("Название товара / Категория / Подкатеогрия / Штрихкод") — хранится
-// ОДНИМ СПЕЦИАЛЬНЫМ ДОКУМЕНТОМ внутри уже существующей коллекции "points" (id CATALOG_DOC_ID,
+// ОДНИМ СПЕЦИАЛЬНЫМ ДОКУМЕНТОМ внутри уже существующей коллекции "points" (id CATALOG_DOC_ID —
+// НЕ должен иметь вид "__что-то__", такие id зарезервированы Firestore и вызывают ошибку
+// "Resource id ... is invalid because it is reserved",
 // который никогда не совпадёт с реальным id вида "monthKey__point", т.к. monthKey всегда имеет
 // формат "YYYY-MM"). Так справочник использует ту же коллекцию, для которой уже настроен
 // доступ в правилах безопасности Firestore — не нужно заводить отдельную коллекцию "config"
