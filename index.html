@@ -523,6 +523,11 @@ const HEADER_LABELS = {
   // "Сумма" — это сумма продаж (продажная цена * кол-во), а НЕ прибыль. В разных форматах
   // кассовых отчётов эта колонка называется по-разному, отсюда несколько вариантов.
   sum: ["сумма продаж, ₸", "сумма продаж по р/ц"],
+  // Блок "Возвраты" в формате "Продажи по Товарам" имеет свои колонки "Кол-во" и
+  // "Сумма возвратов, ₸", идущие ПОСЛЕ колонок продаж — ищем их отдельно, правее найденной
+  // колонки qty продаж, чтобы не перепутать с первым (продажным) "Кол-во".
+  returnQty: ["кол-во"],
+  returnSum: ["сумма возвратов, ₸", "сумма возвратов"],
 };
 function findTableLayout(rows){
   for (let r = 0; r < Math.min(rows.length, 20); r++){
@@ -539,7 +544,17 @@ function findTableLayout(rows){
       if (sumCol===-1 && HEADER_LABELS.sum.includes(v)) sumCol = c;
     }
     if (nameCol!==-1 && qtyCol!==-1 && profitCol!==-1){
-      return { headerRow: r, nameCol, qtyCol, profitCol, sumCol };
+      // Возвраты (если есть) — колонки "Кол-во" / "Сумма возвратов, ₸" правее найденной
+      // колонки продаж qtyCol. Ищем в той же строке заголовков.
+      let returnQtyCol=-1, returnSumCol=-1;
+      for (let c = qtyCol+1; c < row.length; c++){
+        const cell = row[c];
+        if (typeof cell !== "string") continue;
+        const v = cell.trim().toLowerCase();
+        if (returnQtyCol===-1 && HEADER_LABELS.returnQty.includes(v)) returnQtyCol = c;
+        if (returnSumCol===-1 && HEADER_LABELS.returnSum.includes(v)) returnSumCol = c;
+      }
+      return { headerRow: r, nameCol, qtyCol, profitCol, sumCol, returnQtyCol, returnSumCol };
     }
   }
   return null;
@@ -561,8 +576,14 @@ async function parseXlsxFile(file){
     const name = row[layout.nameCol];
     if (!name || typeof name !== "string") continue;
     if (isExcludedItem(name)) continue;
-    const qty = toNum(row[layout.qtyCol]), profit = toNum(row[layout.profitCol]);
-    const sum = layout.sumCol !== -1 ? toNum(row[layout.sumCol]) : 0;
+    const profit = toNum(row[layout.profitCol]);
+    // Кол-во/сумма продаж — чистые, за вычетом возвратов (если в файле есть блок "Возвраты").
+    const grossQty = toNum(row[layout.qtyCol]);
+    const grossSum = layout.sumCol !== -1 ? toNum(row[layout.sumCol]) : 0;
+    const returnQty = layout.returnQtyCol !== -1 ? toNum(row[layout.returnQtyCol]) : 0;
+    const returnSum = layout.returnSumCol !== -1 ? toNum(row[layout.returnSumCol]) : 0;
+    const qty = grossQty - returnQty;
+    const sum = grossSum - returnSum;
     if (qty === 0 && profit === 0 && sum === 0) continue;
     items.push({name: name.trim(), qty, sum, profit, cat: classify(name)});
   }
