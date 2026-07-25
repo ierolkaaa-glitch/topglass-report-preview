@@ -776,10 +776,15 @@ function pointDocId(monthKey, point){
   return monthKey + "__" + point.replace(/\//g, "-");
 }
 
+// Id служебного документа-справочника товаров внутри коллекции "points" (см. localSaveCatalog
+// ниже) — объявлен здесь, до всех функций, которые его используют для фильтрации.
+const CATALOG_DOC_ID = "__catalog__";
+
 async function localListMonths(){
   const snap = await db.collection("points").get();
   const byMonth = {};
   snap.forEach(doc => {
+    if (doc.id === CATALOG_DOC_ID) return; // служебный документ-справочник, не месяц
     const d = doc.data();
     if (!byMonth[d.monthKey]){
       byMonth[d.monthKey] = { monthKey: d.monthKey, monthLabel: d.monthLabel, updatedAt: d.updatedAt, points: [] };
@@ -817,6 +822,7 @@ async function localBackup(){
   const snap = await db.collection("points").get();
   const months = {};
   snap.forEach(doc => {
+    if (doc.id === CATALOG_DOC_ID) return; // служебный документ-справочник, не месяц
     const d = doc.data();
     if (!months[d.monthKey]) months[d.monthKey] = { monthKey: d.monthKey, monthLabel: d.monthLabel, points: {} };
     months[d.monthKey].monthLabel = d.monthLabel;
@@ -849,16 +855,20 @@ async function localRestoreBackup(data){
 }
 
 // Справочник товаров ("Название товара / Категория / Подкатеогрия / Штрихкод") — хранится
-// одним документом в отдельной коллекции "config" (не привязан к месяцу/точке), потому что
-// это общесетевая номенклатура, а не данные продаж. Каждая загрузка нового xlsx полностью
-// заменяет предыдущий справочник.
+// ОДНИМ СПЕЦИАЛЬНЫМ ДОКУМЕНТОМ внутри уже существующей коллекции "points" (id CATALOG_DOC_ID,
+// который никогда не совпадёт с реальным id вида "monthKey__point", т.к. monthKey всегда имеет
+// формат "YYYY-MM"). Так справочник использует ту же коллекцию, для которой уже настроен
+// доступ в правилах безопасности Firestore — не нужно заводить отдельную коллекцию "config"
+// и просить пользователя менять настройки Firebase. Каждая загрузка нового xlsx полностью
+// заменяет предыдущий справочник (isCatalog:true — чтобы этот документ не попадал в обычные
+// списки месяцев/точек, которые фильтруют по наличию monthKey).
 async function localSaveCatalog(rows){
-  await db.collection("config").doc("catalog").set({
-    rows, updatedAt: new Date().toISOString(),
+  await db.collection("points").doc(CATALOG_DOC_ID).set({
+    isCatalog: true, rows, updatedAt: new Date().toISOString(),
   });
 }
 async function localGetCatalog(){
-  const doc = await db.collection("config").doc("catalog").get();
+  const doc = await db.collection("points").doc(CATALOG_DOC_ID).get();
   if (!doc.exists) return null;
   return doc.data();
 }
@@ -1884,6 +1894,7 @@ async function recalculateAllCategories(onProgress){
   let changedDocs = 0;
   let totalDocs = 0;
   for (const doc of snap.docs){
+    if (doc.id === CATALOG_DOC_ID) continue; // служебный документ-справочник, не месяц
     totalDocs++;
     const d = doc.data();
     const items = d.items || [];
