@@ -194,6 +194,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button data-tab="upload" class="active">Загрузить данные</button>
     <button data-tab="report">Отчёт за месяц</button>
     <button data-tab="insights">Сравнение точек и инсайты</button>
+    <button data-tab="catalog">Справочник</button>
     <button data-tab="backup">Резервная копия</button>
   </nav>
   <main>
@@ -325,6 +326,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
+    <!-- CATALOG TAB -->
+    <section class="tab-panel" id="tab-catalog">
+      <div class="card">
+        <h2>Справочник товаров</h2>
+        <p class="muted">Справочник "Название товара / Категория / Подкатегория / Штрихкод" используется для
+        точного определения категории каждого товара — сначала по штрихкоду, затем по названию. Если товар
+        не найден в справочнике, применяются старые правила по ключевым словам в названии. Загрузите xlsx-файл
+        со справочником (лист "data", колонки: Название товара, Категория, Подкатеогрия, Штрихкод) — он заменит
+        текущий справочник целиком и будет использоваться, пока вы не загрузите новый.</p>
+        <div class="row">
+          <input type="file" id="catalog-file-input" accept=".xlsx">
+          <button class="btn" id="catalog-upload-btn" disabled>Загрузить справочник</button>
+        </div>
+        <p class="muted" id="catalog-status" style="margin-top:8px;"></p>
+      </div>
+      <div class="card">
+        <h2>Текущий справочник</h2>
+        <p class="muted" id="catalog-summary">Справочник не загружен — используются встроенные правила по ключевым словам.</p>
+      </div>
+    </section>
+
     <!-- BACKUP TAB -->
     <section class="tab-panel" id="tab-backup">
       <div class="card">
@@ -432,7 +454,92 @@ function normalizeItemName(name){
   return String(name).trim().toLowerCase().replace(/\s+/g,' ');
 }
 
-function classify(name){
+// Динамический справочник товаров, загружаемый пользователем (вкладка "Справочник") —
+// имеет приоритет над встроенными NAME_CATEGORY_MAP/GOODS_SUBCAT_MAP и эвристиками.
+// Сопоставление идёт СНАЧАЛА по штрихкоду (точнее, не зависит от разночтений в названии
+// между разными кассовыми отчётами), и только если штрихкод не задан или не найден —
+// по нормализованному названию. Хранится как два индекса (Map) для быстрого поиска.
+let catalogByBarcode = new Map();
+let catalogByName = new Map();
+let catalogLoadedAt = null;
+
+function normalizeBarcode(v){
+  if (v === null || v === undefined || v === "") return "";
+  // Excel иногда отдаёт штрихкод как число (в т.ч. с плавающей точкой из-за округления) —
+  // приводим к целой строке без пробелов, чтобы сравнение было надёжным в обоих направлениях.
+  if (typeof v === "number") return String(Math.round(v));
+  return String(v).trim().replace(/\s+/g, "").replace(/\.0$/, "");
+}
+
+// Переводит категорию+подкатегорию из справочника в категорию отчёта (как classify()) и,
+// если это "Товары" — дополнительно в подкатегорию товаров (как classifyGoods()). Правила
+// маппинга согласованы с пользователем:
+// - "Стекло" + подкатегория "Стекло 5D"/"6D"/"18D"/"Приват" -> соответствующая GLASS_SUBCATS;
+//   "Skin,Гидрогель." -> разделяется по названию товара (гидрогель -> Гидрогель, иначе Skin);
+//   "Линза на камеры" -> "Линза на камеры"; "Стекло Матовое" -> "Матовое стекло";
+//   "Стекло по 1500" -> "Стекло по 1500/1490"; иначе (нет подкатегории) -> "Другое стекло".
+// - "Чехлы для телефонов" -> "ЧЕХЛЫ".
+// - "USB"/"Зарядные устройства"/"Наушники"/"Беспроводные наушники" -> "ТОВАРЫ" + прямое
+//   соответствие в GOODS_SUBCATS (Зарядные устройства -> "Зарядки").
+// - "9000" + подкатегория "Наушники" -> "ТОВАРЫ"+"Беспроводные наушники", "9000"+"Адаптеры" ->
+//   "ТОВАРЫ"+"Адаптеры" (по прямому указанию пользователя).
+// - всё остальное (20ка, Аксессуары, Инвентарь магазина, АВТОДЕРЖАТЕЛЬ и т.д.) -> "ТОВАРЫ"+"Другие".
+function mapCatalogEntryToCategory(name, category, subcat){
+  const n = normalizeItemName(name);
+  const cat = String(category||"").trim();
+  const sub = String(subcat||"").trim();
+  if (cat === "Стекло"){
+    if (sub === "Стекло 5D") return { cat: "5D" };
+    if (sub === "Стекло 6D") return { cat: "6D" };
+    if (sub === "Стекло 18D") return { cat: "18D" };
+    if (sub === "Стекло Приват") return { cat: n.includes("270") ? "Приват по 270" : "Приват" };
+    if (sub === "Линза на камеры") return { cat: "Линза на камеры" };
+    if (sub === "Стекло Матовое") return { cat: "Матовое стекло" };
+    if (sub === "Стекло по 1500") return { cat: "Стекло по 1500/1490" };
+    if (sub.toLowerCase().includes("гидрогель") || sub.toLowerCase().includes("skin")){
+      return { cat: n.includes("гидрогель") ? "Гидрогель" : "Skin" };
+    }
+    return { cat: "Другое стекло" };
+  }
+  if (cat === "Чехлы для телефонов") return { cat: "ЧЕХЛЫ" };
+  if (cat === "USB") return { cat: "ТОВАРЫ", goodsSub: "USB" };
+  if (cat === "Зарядные устройства") return { cat: "ТОВАРЫ", goodsSub: "Зарядки" };
+  if (cat === "Наушники") return { cat: "ТОВАРЫ", goodsSub: "Наушники" };
+  if (cat === "Беспроводные наушники") return { cat: "ТОВАРЫ", goodsSub: "Беспроводные наушники" };
+  if (cat === "9000"){
+    if (sub === "Наушники") return { cat: "ТОВАРЫ", goodsSub: "Беспроводные наушники" };
+    if (sub === "Адаптеры") return { cat: "ТОВАРЫ", goodsSub: "Адаптеры" };
+    return { cat: "ТОВАРЫ", goodsSub: "Другие" };
+  }
+  return { cat: "ТОВАРЫ", goodsSub: "Другие" };
+}
+
+function buildCatalogIndex(rows){
+  const byBarcode = new Map();
+  const byName = new Map();
+  for (const row of rows){
+    const mapped = mapCatalogEntryToCategory(row.name, row.category, row.subcat);
+    const barcode = normalizeBarcode(row.barcode);
+    const nameKey = normalizeItemName(row.name);
+    if (barcode) byBarcode.set(barcode, mapped);
+    if (nameKey) byName.set(nameKey, mapped);
+  }
+  return { byBarcode, byName };
+}
+
+// Ищет товар в загруженном справочнике: сначала по штрихкоду, затем по названию.
+// Возвращает {cat, goodsSub?} или null, если товар не найден ни там ни там.
+function lookupCatalog(name, barcode){
+  const bc = normalizeBarcode(barcode);
+  if (bc && catalogByBarcode.has(bc)) return catalogByBarcode.get(bc);
+  const nameKey = normalizeItemName(name);
+  if (catalogByName.has(nameKey)) return catalogByName.get(nameKey);
+  return null;
+}
+
+function classify(name, barcode){
+  const fromCatalog = lookupCatalog(name, barcode);
+  if (fromCatalog) return fromCatalog.cat;
   const n = normalizeItemName(name);
   const mapped = NAME_CATEGORY_MAP[n];
   if (mapped) return mapped;
@@ -462,7 +569,9 @@ function classify(name){
 // словам в названии, а если и это не помогло — попадают в "Другие".
 const GOODS_SUBCAT_MAP = {"aipods по 3900":"Наушники","usb по 300":"USB","usb cable orig":"USB","usb type-c to type-c 1190":"USB","usb-c to lighting 2890":"USB","usb type-c foneng x115":"USB","usb-c to lightning по 1190":"USB","зарядное устройство xa-46":"Зарядки","usb t291 c/c":"USB","зу foneng eu46":"Зарядки","usb type-c to type-c 2890":"USB","зу foneng eu72":"Зарядки","usb ts-141 c/c":"USB","usb по 400":"USB","зу ch0111 c/c":"Зарядки","зу foneng eu39":"Зарядки","зу ch0341 c/c":"Зарядки","наушники по 300":"Наушники","usb type-c to type-c 6600":"USB","usb type-c to type-c 890":"USB","наушники lighting foneng t28":"Наушники","зу ch6031 c/c":"Зарядки","зу ch5211 c/c":"Зарядки","наушники 1790":"Наушники","usb-c to lighting 890":"USB","наушники type-c foneng t36":"Наушники","usb ts-033 a/c":"USB","foneng usb type-c to type-c x115":"USB","наушники borofone bm73":"Наушники","usb type-c foneng x119":"USB","airpods 3-9490":"Наушники","airpods pro 2-9490":"Наушники","airpods 4-9490":"Наушники","usb x213 iphone":"USB","usb mletube micro/type/lihgtning":"USB","usb wuw 213 micro":"USB","airpods pro 2-6890":"Наушники","amaya e57s":"Зарядки","airpods 3-6890":"Наушники","зарядное устройство ga-39 type-c/lightning":"Зарядки","usb type-c &ip":"USB","usb samsung type-c to type-c":"USB","зу ch102 a/l":"Зарядки","airpods 4-6890":"Наушники","зу wuw t82 type-c":"Зарядки","usb wuw x195":"USB","usb type-c to type-c foneng x121 orange":"USB","usb wuw x192 lighting":"USB","наушники p9":"Наушники","usb xp-53":"USB","usb c68 iphone":"USB","usb type-c to type-c foneng x121 white":"USB","зу wuw t82 micro":"Зарядки","зу wuw t55 micro":"Зарядки","зу wuw t55 lighting":"Зарядки","зу wuw t55 type-c":"Зарядки","зу ch6031 c/l":"Зарядки","наушники dg по 1000":"Наушники","usb 2в1":"USB","зу u010 iphone":"Зарядки","usb c33 iphone":"USB","зарядное устройство gerlax ga-26":"Зарядки","usb d58t":"USB","зу u016 type-c":"Зарядки","зу u015 type-c":"Зарядки","usb otg":"USB","airpods pro по 6900":"Наушники","usb hoco u133":"USB","usb ts-033 a/l":"USB","usb x21":"USB","наушники led ms-b4":"Наушники","usb d07l":"USB","usb по 500":"USB","samsung адаптер 45w":"Зарядки","usb магнит micro ip,type c m3":"USB","usb d07v":"USB","зу u010 type-c":"Зарядки","usb hoco x90":"USB","usb wuw x192 micro/type":"USB","зу type-c amaya e59s":"Зарядки","usb d42l":"USB","u016 iphone":"Зарядки","зарядка по 600":"Зарядки","зу u014 type-c":"Зарядки","usb магнитный mx-cb37":"USB","наушники wuw r162":"Наушники","наушники на шею p100":"Наушники","беспроводная зарядка 15w borofone":"Зарядки","airpods 3 lux по 6900":"Наушники","наушники y08":"Наушники","зу m19":"Зарядки","usb d02v vdenmev":"USB","зу wuw c269 type-c":"Зарядки","наушники bm71 type-c":"Наушники","наушники borofone bm77":"Наушники","наушники type-c expert":"Наушники","зарядка c70a":"Зарядки","u014 usb type-c":"Зарядки","зу c268 type-c":"Зарядки","наушники ge-03":"Наушники","з,у -35w 15 pro max":"Зарядки","детские наушники":"Наушники","usb для iph":"USB","наушники g5":"Наушники","usb-c 1m реплика":"USB","x60 type-c/ip":"USB","x60 micro":"USB","наушники borofone bm35":"Наушники","usb bu16":"USB","наушник p2961":"Наушники","шнур type-c to type-c 15":"USB","зарядное устройство mi":"Зарядки","наушники ls-707/710":"Наушники","наушники redmi airdots pro3":"Наушники","наушники hoco m123":"Наушники","заряд.уст.мохом kh-22":"Зарядки","наушник byz se519a":"Наушники","наушники m1 pro type-c":"Наушники","зарядное устройство amaya e56+m":"Зарядки","wireless gharger kakusiga":"Зарядки","usb d42t":"USB","наушник byz se386a":"Наушники","usb bx32":"USB","наушники hoco m47":"Наушники","usb d02l vdenmenv":"USB","usb кабель по 700":"USB","airpods 3 по 3400":"Наушники","наушники g17":"Наушники","наушники pzx l22":"Наушники","usb d58v":"USB","usb gfuz micro":"USB","type-c xp-33":"USB","usb d02t vdenmenv":"USB","наушники по 500 yr":"Наушники","наушники ultrapods max":"Наушники","usb micro":"USB","usb x1":"USB","зарядка отау mrm-315":"Зарядки","airpods с экраном":"Наушники","наушники iphone7 type-c":"Наушники","зарядка gerlax ga-27":"Зарядки","usb szx 2m micro":"USB","наушники на шею dl01":"Наушники","наушник dr17":"Наушники","наушники bw29":"Наушники","usb c32 type-c":"USB","airpods 2 по 3400":"Наушники","наушники earpods":"Наушники","наушник xb380bt":"Наушники","usb для планшета samsung tab":"USB","usb-c lightning 1м":"USB","наушники на iphone 7":"Наушники","зу micro m3":"Зарядки","usb cable to lihgtning (1m)":"USB","зарядное устройство byz day-2002":"Зарядки","usb x21 hoco":"USB","usb gerlax gd-41":"USB","usb szx 2m ip":"USB","зу wuw 20w t74":"Зарядки","наушник dr18":"Наушники","airpods lux по 6900":"Наушники","usb 27w pd":"USB","наушники i9s 5.0":"Наушники","наушники по 650":"Наушники","usb bx37 micro":"USB","u015 usb type-c":"Зарядки","usb borofone bx100":"USB","usb szx ss206 2m":"USB","наушники wuw r186 type-c":"Наушники","usb d42v":"USB","usb c68 type-c to type-c":"USB","usb x99":"USB","наушник bm95":"Наушники","usb type-c/iphone amaya c09":"USB","usb-c to type c 60w":"USB","наушник byz se378a вакум":"Наушники","наушники на шею dl03":"Наушники","зарядное устройство gerlax ga-25p":"Зарядки","наушник h22":"Наушники","airpods 4":"Наушники","наушники kin-822":"Наушники","usb type-c to type-c original":"USB","hoco x50 micro":"USB","наушники wuw r179 type-c":"Наушники","наушник ultra":"Наушники","зарядное устройство xa-006":"Зарядки","usb cable to lightning":"USB","зарядное устройство bacy bc-05":"Зарядки","наушник type-c mletuble":"Наушники","зу amaya lightning":"Зарядки","наушники cr-8":"Наушники","зарядное устройство bass71a":"Зарядки","зарядное устройство redmi 120w":"Зарядки","наушники hf-14":"Наушники","наушники marshall major4":"Наушники","u72 samsung galaxy (usb hoco)":"USB","usb hoco x59":"USB","наушник borofone bm66":"Наушники","наушники remax rm-303":"Наушники","зу xa-007 lightning/tupe-c":"Зарядки","наушник m110":"Наушники","usb type-c x82/x86":"USB","шнур type-c to lightning":"USB","зарядка ba20a":"Зарядки","mletubl usb-c to lighting":"USB","usb gerlax l17":"USB","usb xp-40":"USB","наушники dg по 1200":"Наушники","usb lighting original":"USB","наушник x4":"Наушники","u010 usb":"Зарядки","usb szx ss268":"USB","ucb cable type to type-c (1m)":"USB","зарядное устройство borofone ba32a":"Зарядки","usb szx ss269":"USB","наушники wuw r170":"Наушники","usb wuw x213type-c":"USB","usb d07t":"USB","usb d59c vdenmenv":"USB","зарядное устройство gerlax a3":"Зарядки","usb c31 micro":"USB","наушники по 800":"Наушники","usb micro m07":"USB","зарядное устройство mi 33w":"Зарядки","usb micro cm05":"USB","наушники ge-14":"Наушники","наушник g9":"Наушники","usb borofone bx30":"USB","usb borofone bu33":"USB","usb 2m xp-55 type-c":"USB","зу lightning ga-32p":"Зарядки","usb wuw x195 type-c":"USB","наушники hoco m124":"Наушники","наушники hoco m122":"Наушники","usb type-c/lightning c14":"USB","usb xipin top lx21 ip по 1200":"USB"};
 
-function classifyGoods(name){
+function classifyGoods(name, barcode){
+  const fromCatalog = lookupCatalog(name, barcode);
+  if (fromCatalog && fromCatalog.goodsSub) return fromCatalog.goodsSub;
   const n = normalizeItemName(name);
   // Премиальные беспроводные наушники — отдельная категория, проверяется раньше справочника
   // и общего правила "Наушники": AirPods Pro / Lux / 3 Lux / Max, Tesna Buds / Pro.
@@ -528,12 +637,15 @@ const HEADER_LABELS = {
   // колонки qty продаж, чтобы не перепутать с первым (продажным) "Кол-во".
   returnQty: ["кол-во"],
   returnSum: ["сумма возвратов, ₸", "сумма возвратов"],
+  // Штрихкод — есть в обоих форматах отчётов о продажах, нужен для точного сопоставления
+  // со справочником товаров (надёжнее, чем название, которое может отличаться между кассами).
+  barcode: ["штрихкод"],
 };
 function findTableLayout(rows){
   for (let r = 0; r < Math.min(rows.length, 20); r++){
     const row = rows[r];
     if (!row) continue;
-    let nameCol=-1, qtyCol=-1, profitCol=-1, sumCol=-1;
+    let nameCol=-1, qtyCol=-1, profitCol=-1, sumCol=-1, barcodeCol=-1;
     for (let c = 0; c < row.length; c++){
       const cell = row[c];
       if (typeof cell !== "string") continue;
@@ -542,6 +654,7 @@ function findTableLayout(rows){
       if (qtyCol===-1 && HEADER_LABELS.qty.includes(v)) qtyCol = c;
       if (profitCol===-1 && HEADER_LABELS.profit.includes(v)) profitCol = c;
       if (sumCol===-1 && HEADER_LABELS.sum.includes(v)) sumCol = c;
+      if (barcodeCol===-1 && HEADER_LABELS.barcode.includes(v)) barcodeCol = c;
     }
     if (nameCol!==-1 && qtyCol!==-1 && profitCol!==-1){
       // Возвраты (если есть) — колонки "Кол-во" / "Сумма возвратов, ₸" правее найденной
@@ -554,7 +667,7 @@ function findTableLayout(rows){
         if (returnQtyCol===-1 && HEADER_LABELS.returnQty.includes(v)) returnQtyCol = c;
         if (returnSumCol===-1 && HEADER_LABELS.returnSum.includes(v)) returnSumCol = c;
       }
-      return { headerRow: r, nameCol, qtyCol, profitCol, sumCol, returnQtyCol, returnSumCol };
+      return { headerRow: r, nameCol, qtyCol, profitCol, sumCol, returnQtyCol, returnSumCol, barcodeCol };
     }
   }
   return null;
@@ -585,7 +698,8 @@ async function parseXlsxFile(file){
     const qty = grossQty - returnQty;
     const sum = grossSum - returnSum;
     if (qty === 0 && profit === 0 && sum === 0) continue;
-    items.push({name: name.trim(), qty, sum, profit, cat: classify(name)});
+    const barcode = layout.barcodeCol !== -1 ? normalizeBarcode(row[layout.barcodeCol]) : "";
+    items.push({name: name.trim(), qty, sum, profit, barcode, cat: classify(name, barcode)});
   }
   const periodMonth = extractPeriodMonth(allRows);
   return { items, periodMonth };
@@ -734,6 +848,21 @@ async function localRestoreBackup(data){
   if (count > 0) await batch.commit();
 }
 
+// Справочник товаров ("Название товара / Категория / Подкатеогрия / Штрихкод") — хранится
+// одним документом в отдельной коллекции "config" (не привязан к месяцу/точке), потому что
+// это общесетевая номенклатура, а не данные продаж. Каждая загрузка нового xlsx полностью
+// заменяет предыдущий справочник.
+async function localSaveCatalog(rows){
+  await db.collection("config").doc("catalog").set({
+    rows, updatedAt: new Date().toISOString(),
+  });
+}
+async function localGetCatalog(){
+  const doc = await db.collection("config").doc("catalog").get();
+  if (!doc.exists) return null;
+  return doc.data();
+}
+
 /* ============ АГРЕГАЦИЯ ============ */
 function aggregateByCategory(items){
   const m = {};
@@ -779,7 +908,105 @@ function initApp(){
   updateUploadMonthLabel();
   document.getElementById("upload-month").addEventListener("change", ()=>{ monthManuallySet = true; updateUploadMonthLabel(); });
   initUploadTab();
+  initCatalogTab();
+  loadCatalogIntoMemory();
   refreshMonthsEverywhere();
+}
+
+/* ============ СПРАВОЧНИК ТОВАРОВ ============ */
+// Загружает справочник из Firestore в память (индексы catalogByBarcode/catalogByName) и
+// обновляет текст на вкладке "Справочник". Вызывается при старте приложения, а также сразу
+// после успешной загрузки нового xlsx-файла со справочником.
+async function loadCatalogIntoMemory(){
+  try{
+    const data = await localGetCatalog();
+    if (!data || !data.rows || !data.rows.length){
+      catalogByBarcode = new Map();
+      catalogByName = new Map();
+      catalogLoadedAt = null;
+      updateCatalogSummary();
+      return;
+    }
+    const idx = buildCatalogIndex(data.rows);
+    catalogByBarcode = idx.byBarcode;
+    catalogByName = idx.byName;
+    catalogLoadedAt = data.updatedAt;
+    updateCatalogSummary(data.rows.length);
+  }catch(e){
+    showFatalError("Не удалось загрузить справочник товаров: " + e.message);
+  }
+}
+
+function updateCatalogSummary(rowCount){
+  const el = document.getElementById("catalog-summary");
+  if (!el) return;
+  if (!rowCount){
+    el.textContent = "Справочник не загружен — используются встроенные правила по ключевым словам.";
+    return;
+  }
+  const dateStr = catalogLoadedAt ? new Date(catalogLoadedAt).toLocaleString("ru-RU") : "";
+  el.textContent = `Загружено позиций: ${rowCount}. Последнее обновление: ${dateStr}.`;
+}
+
+// Парсит xlsx-справочник (лист "data", колонки: Название товара, Категория, Подкатеогрия,
+// Штрихкод — как в файле Наименование-Категория.xlsx) в массив {name, category, subcat, barcode}.
+async function parseCatalogXlsxFile(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:"array"});
+  const ws = wb.Sheets["data"] || wb.Sheets[wb.SheetNames[0]];
+  const allRows = XLSX.utils.sheet_to_json(ws, {header:1, range:0, defval:null});
+  if (!allRows.length) throw new Error("Файл пуст");
+  // Первая строка — заголовки; ищем нужные колонки по названию (регистронезависимо),
+  // а не по жёсткой позиции, на случай, если порядок колонок в будущем изменится.
+  const header = allRows[0].map(v => typeof v === "string" ? v.trim().toLowerCase() : "");
+  const nameCol = header.findIndex(v => v.includes("название"));
+  const catCol = header.findIndex(v => v === "категория" || v.includes("категория") && !v.includes("под"));
+  const subcatCol = header.findIndex(v => v.includes("подкат"));
+  const barcodeCol = header.findIndex(v => v.includes("штрихкод") && !v.includes("доп"));
+  if (nameCol === -1 || catCol === -1){
+    throw new Error("Не удалось распознать структуру файла — не найдены колонки «Название товара» и «Категория»");
+  }
+  const rows = [];
+  for (let r = 1; r < allRows.length; r++){
+    const row = allRows[r];
+    if (!row) continue;
+    const name = row[nameCol];
+    if (!name || typeof name !== "string") continue;
+    rows.push({
+      name: name.trim(),
+      category: catCol !== -1 ? (row[catCol] || "") : "",
+      subcat: subcatCol !== -1 ? (row[subcatCol] || "") : "",
+      barcode: barcodeCol !== -1 ? normalizeBarcode(row[barcodeCol]) : "",
+    });
+  }
+  return rows;
+}
+
+function initCatalogTab(){
+  const fi = document.getElementById("catalog-file-input");
+  const btn = document.getElementById("catalog-upload-btn");
+  fi.addEventListener("change", ()=>{ btn.disabled = !fi.files.length; });
+  btn.addEventListener("click", async ()=>{
+    const file = fi.files[0];
+    if (!file) return;
+    const status = document.getElementById("catalog-status");
+    btn.disabled = true;
+    status.textContent = "Загрузка и разбор файла...";
+    try{
+      const rows = await parseCatalogXlsxFile(file);
+      if (!rows.length) throw new Error("В файле не найдено ни одной строки с товаром");
+      await localSaveCatalog(rows);
+      await loadCatalogIntoMemory();
+      status.textContent = `Готово — справочник обновлён, загружено позиций: ${rows.length}.`;
+      fi.value = "";
+      toast("Справочник обновлён");
+    }catch(e){
+      status.textContent = "Ошибка: " + e.message;
+      toast("Ошибка загрузки справочника");
+    }finally{
+      btn.disabled = true;
+    }
+  });
 }
 
 function updateUploadMonthLabel(){
@@ -982,7 +1209,7 @@ function aggregateGlassBySubtype(items){
 function aggregateGoodsBySubtype(items){
   const m = {}; GOODS_SUBCATS.forEach(c=>m[c]={qty:0,profit:0,sum:0});
   for (const it of items){
-    const sub = classifyGoods(it.name);
+    const sub = classifyGoods(it.name, it.barcode);
     m[sub].qty += it.qty; m[sub].profit += it.profit; m[sub].sum += (it.sum||0);
   }
   return m;
@@ -1431,7 +1658,7 @@ function openDrillModal(kind, rec, pointsWithData){
       let s = 0;
       for (const it of rec.points[p]){
         if (kind === "glass"){ if (it.cat === sub) s += it.qty; }
-        else { if (it.cat === "ТОВАРЫ" && classifyGoods(it.name) === sub) s += it.qty; }
+        else { if (it.cat === "ТОВАРЫ" && classifyGoods(it.name, it.barcode) === sub) s += it.qty; }
       }
       return s;
     });
@@ -1555,7 +1782,7 @@ function insightsSubtypeOf(it){
   if (it.cat === "ЧЕХЛЫ") return null;
   if (it.cat === "Гидрогель") return "Гидрогель";
   if (INSIGHTS_STECLO_CATS.has(it.cat)) return it.cat;
-  if (it.cat === "ТОВАРЫ") return classifyGoods(it.name);
+  if (it.cat === "ТОВАРЫ") return classifyGoods(it.name, it.barcode);
   return null;
 }
 function insightsFilterCategoryOf(subtype){
@@ -1662,7 +1889,7 @@ async function recalculateAllCategories(onProgress){
     const items = d.items || [];
     let changed = false;
     const newItems = items.map(it=>{
-      const newCat = classify(it.name);
+      const newCat = classify(it.name, it.barcode);
       if (newCat !== it.cat) changed = true;
       return Object.assign({}, it, {cat: newCat});
     });
