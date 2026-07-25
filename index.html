@@ -488,6 +488,26 @@ function normalizeBarcode(v){
 // - "9000" + подкатегория "Наушники" -> "ТОВАРЫ"+"Беспроводные наушники", "9000"+"Адаптеры" ->
 //   "ТОВАРЫ"+"Адаптеры" (по прямому указанию пользователя).
 // - всё остальное (20ка, Аксессуары, Инвентарь магазина, АВТОДЕРЖАТЕЛЬ и т.д.) -> "ТОВАРЫ"+"Другие".
+// Некоторые строки справочника имеют категорию "Стекло", но ПУСТУЮ или незнакомую
+// подкатегорию (обнаружено пользователем — часть стёкол в справочнике без подкатегории).
+// Для таких случаев определяем подтип по ключевым признакам в самом названии — те же
+// правила, что использует classify() для товаров, которых вообще нет в справочнике.
+// "Приват" распознаётся по слову "приват" в названии (а "Приват по 270" — по слову "приват"
+// вместе с "270", это просто более узкий подвид того же "Приват"), поэтому отдельная
+// проверка по цене продажи (950) для случая "приват" в названии не нужна.
+function guessGlassSubcatFromName(n){
+  if (n.includes("гидрогель")) return "Гидрогель";
+  if (n.includes("скин") || n.includes("skin")) return "Skin";
+  if (n.includes("линза")) return "Линза на камеры";
+  if (n.includes("матов")) return "Матовое стекло";
+  if (n.includes("приват")) return n.includes("270") ? "Приват по 270" : "Приват";
+  if (/\b18\s*d\b/.test(n)) return "18D";
+  if (n.includes("1500") || n.includes("1490")) return "Стекло по 1500/1490";
+  if (/\b6\s*d\b/.test(n)) return "6D";
+  if (/\b5\s*d\b/.test(n)) return "5D";
+  return null;
+}
+
 function mapCatalogEntryToCategory(name, category, subcat){
   const n = normalizeItemName(name);
   const cat = String(category||"").trim();
@@ -503,7 +523,13 @@ function mapCatalogEntryToCategory(name, category, subcat){
     if (sub.toLowerCase().includes("гидрогель") || sub.toLowerCase().includes("skin")){
       return { cat: n.includes("гидрогель") ? "Гидрогель" : "Skin" };
     }
-    return { cat: "Другое стекло" };
+    // Подкатегория пустая или не распознана явно — пробуем угадать подтип по названию
+    // (5D/6D/18D/по 270/по 1490-1500/приват), и только если ничего не подошло — "Другое
+    // стекло". guessedByPriceHint=true помечает случай "нет явных признаков в названии",
+    // чтобы classify() мог доопределить его как Приват по цене продажи 950 (см. ниже).
+    const guessed = guessGlassSubcatFromName(n);
+    if (guessed) return { cat: guessed };
+    return { cat: "Другое стекло", guessedByPriceHint: true };
   }
   if (cat === "Чехлы для телефонов") return { cat: "ЧЕХЛЫ" };
   if (cat === "USB") return { cat: "ТОВАРЫ", goodsSub: "USB" };
@@ -543,9 +569,18 @@ function lookupCatalog(name, barcode){
   return null;
 }
 
-function classify(name, barcode){
+// unitPrice (необязателен) — цена продажи за 1 шт (сумма продаж / кол-во) конкретной строки
+// отчёта. Используется только для стёкол из справочника без распознанной подкатегории
+// (см. guessedByPriceHint в mapCatalogEntryToCategory): если цена за штуку равна 950 —
+// считаем это "Приват" (продавцы называют так стёкла по 950, даже если слова "приват" в
+// названии нет). Без unitPrice (например, при показе одного товара без контекста строки)
+// эта проверка просто не применяется — товар остаётся "Другое стекло".
+function classify(name, barcode, unitPrice){
   const fromCatalog = lookupCatalog(name, barcode);
-  if (fromCatalog) return fromCatalog.cat;
+  if (fromCatalog){
+    if (fromCatalog.guessedByPriceHint && unitPrice === 950) return "Приват";
+    return fromCatalog.cat;
+  }
   const n = normalizeItemName(name);
   const mapped = NAME_CATEGORY_MAP[n];
   if (mapped) return mapped;
@@ -705,7 +740,8 @@ async function parseXlsxFile(file){
     const sum = grossSum - returnSum;
     if (qty === 0 && profit === 0 && sum === 0) continue;
     const barcode = layout.barcodeCol !== -1 ? normalizeBarcode(row[layout.barcodeCol]) : "";
-    items.push({name: name.trim(), qty, sum, profit, barcode, cat: classify(name, barcode)});
+    const unitPrice = qty ? Math.round(sum / qty) : undefined;
+    items.push({name: name.trim(), qty, sum, profit, barcode, cat: classify(name, barcode, unitPrice)});
   }
   const periodMonth = extractPeriodMonth(allRows);
   return { items, periodMonth };
@@ -1908,7 +1944,8 @@ async function recalculateAllCategories(onProgress){
     const items = d.items || [];
     let changed = false;
     const newItems = items.map(it=>{
-      const newCat = classify(it.name, it.barcode);
+      const unitPrice = it.qty ? Math.round((it.sum||0) / it.qty) : undefined;
+      const newCat = classify(it.name, it.barcode, unitPrice);
       if (newCat !== it.cat) changed = true;
       return Object.assign({}, it, {cat: newCat});
     });
