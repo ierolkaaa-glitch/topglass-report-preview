@@ -98,51 +98,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
-    --accent:#2F5496; --accent-light:#4472C4; --green:#548235; --bg:#f4f6f9; --card:#ffffff;
-    --text:#1f2937; --muted:#6b7280; --border:#e2e6ec;
+    --accent:#3B6FE0; --accent-light:#5C87E8; --green:#1D9E75; --bg:#f2f4f8; --card:#ffffff;
+    --card-soft:#f7f8fb; --text:#181a20; --muted:#70747e; --border:#e7e9ee; --radius-lg:16px; --radius-md:12px;
   }
   *{box-sizing:border-box;}
-  body{margin:0; font-family: Arial, "Segoe UI", sans-serif; background:var(--bg); color:var(--text);}
+  body{margin:0; font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased;}
   #app{display:none;}
   #password-gate{position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:2000;}
-  #password-gate .gate-box{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:32px 28px; width:280px; box-shadow:0 8px 30px rgba(0,0,0,.08); text-align:center;}
-  #password-gate h2{margin:0 0 16px; font-size:16px; color:var(--text);}
-  #password-gate input{width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; margin-bottom:10px; box-sizing:border-box;}
-  #password-gate button{width:100%; padding:10px; background:var(--accent); color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer;}
+  #password-gate .gate-box{background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:32px 28px; width:280px; box-shadow:0 12px 32px rgba(20,24,40,.08); text-align:center;}
+  #password-gate h2{margin:0 0 16px; font-size:16px; color:var(--text); font-weight:600;}
+  #password-gate input{width:100%; padding:11px 14px; border:1px solid var(--border); border-radius:var(--radius-md); font-size:14px; margin-bottom:10px; box-sizing:border-box; background:var(--card-soft);}
+  #password-gate button{width:100%; padding:11px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius-md); font-size:14px; cursor:pointer; font-weight:600;}
   #password-gate button:hover{background:var(--accent-light);}
   #password-gate .gate-error{color:#c0392b; font-size:12px; min-height:16px; margin-bottom:6px;}
-  header.topbar{background:var(--accent); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between;}
-  header.topbar h1{font-size:18px; margin:0;}
-  nav.tabs{display:flex; gap:4px; background:#fff; padding:0 20px; border-bottom:1px solid var(--border); overflow-x:auto;}
-  nav.tabs button{padding:12px 16px; background:none; border:none; font-size:13px; cursor:pointer; color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap;}
-  nav.tabs button.active{color:var(--accent); border-bottom-color:var(--accent); font-weight:bold;}
-  main{padding:20px 24px; max-width:1400px; margin:0 auto;}
+  header.topbar{background:linear-gradient(135deg,#2E5BD8,#3B6FE0); color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between;}
+  header.topbar h1{font-size:18px; margin:0; font-weight:600; letter-spacing:-0.01em;}
+  nav.tabs{display:flex; gap:6px; background:#fff; padding:10px 20px; border-bottom:1px solid var(--border); overflow-x:auto;}
+  nav.tabs button{padding:9px 16px; background:none; border:none; font-size:13px; cursor:pointer; color:var(--muted); border-radius:999px; white-space:nowrap; font-weight:500; transition:.15s;}
+  nav.tabs button:hover{background:var(--card-soft);}
+  nav.tabs button.active{color:#fff; background:var(--accent); font-weight:600;}
+  main{padding:24px; max-width:1400px; margin:0 auto;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
 
-  .card{background:var(--card); border-radius:10px; padding:18px 20px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.06); border:1px solid var(--border);}
-  .card h2{font-size:15px; margin:0 0 14px; color:var(--accent);}
-  .card h3{font-size:13px; margin:18px 0 8px; color:var(--text);}
+  .card{background:var(--card); border-radius:var(--radius-lg); padding:22px 24px; margin-bottom:20px; box-shadow:0 1px 2px rgba(20,24,40,.04), 0 8px 24px rgba(20,24,40,.03); border:1px solid var(--border);}
+  .card h2{font-size:16px; margin:0 0 16px; color:var(--text); font-weight:600; letter-spacing:-0.01em;}
+  .card h3{font-size:13px; margin:18px 0 8px; color:var(--text); font-weight:600;}
   .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
   label{font-size:12px; color:var(--muted);}
-  select, input[type=month], input[type=text], input[type=number]{padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;}
-  button.btn{padding:8px 14px; background:var(--accent); color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px;}
+  select, input[type=month], input[type=text], input[type=number]{padding:9px 12px; border:1px solid var(--border); border-radius:var(--radius-md); font-size:13px; background:var(--card-soft);}
+  button.btn{padding:9px 16px; background:var(--accent); color:#fff; border:none; border-radius:999px; cursor:pointer; font-size:13px; font-weight:600; transition:.15s;}
   button.btn:hover{background:var(--accent-light);}
-  button.btn.secondary{background:#fff; color:var(--accent); border:1px solid var(--accent);}
+  button.btn.secondary{background:var(--card-soft); color:var(--accent); border:1px solid var(--border);}
   button.btn.green{background:var(--green);}
   button.btn:disabled{opacity:.5; cursor:not-allowed;}
 
-  .dropzone{border:2px dashed var(--border); border-radius:10px; padding:30px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; transition:.15s;}
-  .dropzone.drag{border-color:var(--accent); background:#eef2f9;}
+  .dropzone{border:1.5px dashed var(--border); border-radius:var(--radius-lg); padding:30px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; transition:.15s; background:var(--card-soft);}
+  .dropzone.drag{border-color:var(--accent); background:#eaf0fd;}
 
-  table{border-collapse:collapse; width:100%; font-size:12.5px;}
-  table th, table td{border:1px solid var(--border); padding:6px 8px; text-align:left;}
-  table th{background:#f2f4f8; font-weight:bold;}
+  table{border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px;}
+  table th, table td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--border);}
+  table th{background:transparent; font-weight:600; color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;}
+  table tr:last-child td{border-bottom:none;}
   table td.num{text-align:right; font-variant-numeric: tabular-nums;}
-  .file-row{display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;}
+  .file-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;}
   .file-row .fname{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .status{font-size:12px; padding:2px 8px; border-radius:10px;}
-  .status.pending{background:#f3f4f6; color:var(--muted);}
+  .status{font-size:12px; padding:3px 10px; border-radius:999px; font-weight:500;}
+  .status.pending{background:var(--card-soft); color:var(--muted);}
   .status.parsing{background:#fef3c7; color:#92400e;}
   .status.ok{background:#dcfce7; color:#166534;}
   .status.err{background:#fee2e2; color:#991b1b;}
@@ -152,27 +154,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .chart-wrap{position:relative; height:260px;}
   .pie-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:16px;}
   .pie-item{display:flex; flex-direction:column; align-items:stretch;}
-  .pie-item h4{font-size:12px; text-align:center; margin:0 0 6px; color:var(--text);}
+  .pie-item h4{font-size:12px; text-align:center; margin:0 0 6px; color:var(--text); font-weight:600;}
   .pie-item-wrap{position:relative; height:200px;}
-  .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px;}
-  .modal-box{background:var(--card); border-radius:10px; padding:20px 22px; width:100%; max-width:800px; max-height:90vh; overflow:auto; box-shadow:0 4px 24px rgba(0,0,0,.25);}
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,18,30,.55); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .modal-box{background:var(--card); border-radius:var(--radius-lg); padding:22px 24px; width:100%; max-width:800px; max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgba(15,18,30,.3);}
   .modal-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
-  .point-section{border-top:3px solid var(--accent); margin-top:22px; padding-top:14px;}
-  .point-section h3.point-title{font-size:16px; color:var(--accent); margin:0 0 12px;}
-  .goods-section{border-top:3px solid var(--green);}
-  .goods-section h3.point-title{color:var(--green);}
-  .insight-item{padding:8px 10px; border-left:3px solid var(--accent); background:#f8f9fb; margin-bottom:6px; font-size:13px; border-radius:0 6px 6px 0;}
+  .point-section{border-top:none; margin-top:24px; padding-top:0;}
+  .point-section h3.point-title{font-size:17px; color:var(--text); margin:0 0 4px; font-weight:600; letter-spacing:-0.01em;}
+  .goods-section{border-top:1px solid var(--border); padding-top:18px;}
+  .goods-section h3.point-title{color:var(--text); font-size:14px;}
+  .insight-item{padding:10px 12px; border-left:3px solid var(--accent); background:var(--card-soft); margin-bottom:6px; font-size:13px; border-radius:0 var(--radius-md) var(--radius-md) 0;}
   .muted{color:var(--muted); font-size:12px;}
-  .badge{display:inline-block; background:#eef2f9; color:var(--accent); border-radius:10px; padding:1px 8px; font-size:11px; margin-left:6px;}
+  .badge{display:inline-block; background:#eaf0fd; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:11px; margin-left:6px; font-weight:500;}
   .slider-row{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
   .slider-row input[type=range]{flex:1;}
-  .toast{position:fixed; bottom:20px; right:20px; background:#1f2937; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:999;}
+  .toast{position:fixed; bottom:20px; right:20px; background:#181a20; color:#fff; padding:11px 18px; border-radius:var(--radius-md); font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:999; box-shadow:0 8px 24px rgba(0,0,0,.2);}
   .toast.show{opacity:1;}
-  .btn-link{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:6px 0; text-decoration:underline;}
+  .btn-link{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:6px 0; font-weight:600;}
   .btn-link:hover{color:var(--accent-light);}
-  .detail-panel{margin-top:8px; padding-top:8px; border-top:1px dashed var(--border);}
-  .detail-panel h4{font-size:12px; margin:0 0 6px; color:var(--muted);}
+  .detail-panel{margin-top:12px; padding-top:16px; border-top:1px solid var(--border);}
+  .detail-panel h4{font-size:12px; margin:0 0 6px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em;}
   .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;}
+  .stat-card{background:var(--card-soft); border-radius:var(--radius-md); padding:14px 16px;}
+  .stat-card .stat-label{font-size:11px; color:var(--muted); margin:0 0 6px; text-transform:uppercase; letter-spacing:.04em; font-weight:600;}
+  .stat-card .stat-value{font-size:20px; font-weight:600; margin:0; letter-spacing:-0.01em;}
+
+  .point-switcher{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;}
+  .point-switcher button{padding:9px 18px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:13px; font-weight:500; cursor:pointer; transition:.15s;}
+  .point-switcher button:hover{background:var(--card-soft);}
+  .point-switcher button.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
 </style>
 </head>
 <body>
@@ -309,6 +321,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <option value="Зарядки">Зарядки</option>
             <option value="USB">USB</option>
             <option value="Адаптеры">Адаптеры</option>
+            <option value="9000">9000</option>
             <option value="Другие">Другие</option>
           </select>
         </div>
@@ -437,8 +450,8 @@ const GLASS_SUBCAT_COLORS = {
 const CASE_COLOR = "#8B4513";
 const GOODS_COLOR = "#264478";
 // Подкатегории "Товаров" (всё, что не стекло и не чехлы) — только для отчёта за месяц.
-const GOODS_SUBCATS = ["Наушники","Беспроводные наушники","Зарядки","USB","Адаптеры","Другие"];
-const GOODS_SUBCAT_COLORS = { "Наушники":"#FF66CC", "Беспроводные наушники":"#C00080", "Зарядки":"#264478", "USB":"#00B0F0", "Адаптеры":"#92D050", "Другие":"#A6A6A6" };
+const GOODS_SUBCATS = ["Наушники","Беспроводные наушники","Зарядки","USB","Адаптеры","9000","Другие"];
+const GOODS_SUBCAT_COLORS = { "Наушники":"#FF66CC", "Беспроводные наушники":"#C00080", "Зарядки":"#264478", "USB":"#00B0F0", "Адаптеры":"#92D050", "9000":"#7F6000", "Другие":"#A6A6A6" };
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -489,8 +502,10 @@ function normalizeBarcode(v){
 // - "Чехлы для телефонов" -> "ЧЕХЛЫ".
 // - "USB"/"Зарядные устройства"/"Наушники"/"Беспроводные наушники" -> "ТОВАРЫ" + прямое
 //   соответствие в GOODS_SUBCATS (Зарядные устройства -> "Зарядки").
-// - "9000" + подкатегория "Наушники" -> "ТОВАРЫ"+"Беспроводные наушники", "9000"+"Адаптеры" ->
-//   "ТОВАРЫ"+"Адаптеры" (по прямому указанию пользователя).
+// - "9000" -> "ТОВАРЫ"+"9000" — отдельная подкатегория товаров сама по себе, подкатегория
+//   справочника внутри "9000" (Наушники/Адаптеры/др.) больше не учитывается (по прямому
+//   указанию пользователя — раньше "9000"+"Наушники" уходило в "Беспроводные наушники", а
+//   "9000"+"Адаптеры" в "Адаптеры", теперь весь "9000" — своя видимая везде подкатегория).
 // - всё остальное (20ка, Аксессуары, Инвентарь магазина, АВТОДЕРЖАТЕЛЬ и т.д.) -> "ТОВАРЫ"+"Другие".
 // Некоторые строки справочника имеют категорию "Стекло", но ПУСТУЮ или незнакомую
 // подкатегорию (обнаружено пользователем — часть стёкол в справочнике без подкатегории).
@@ -563,11 +578,12 @@ function mapCatalogEntryToCategory(name, category, subcat){
   if (cat === "Зарядные устройства") return { cat: "ТОВАРЫ", goodsSub: "Зарядки" };
   if (cat === "Наушники") return { cat: "ТОВАРЫ", goodsSub: "Наушники" };
   if (cat === "Беспроводные наушники") return { cat: "ТОВАРЫ", goodsSub: "Беспроводные наушники" };
-  if (cat === "9000"){
-    if (sub === "Наушники") return { cat: "ТОВАРЫ", goodsSub: "Беспроводные наушники" };
-    if (sub === "Адаптеры") return { cat: "ТОВАРЫ", goodsSub: "Адаптеры" };
-    return { cat: "ТОВАРЫ", goodsSub: "Другие" };
-  }
+  // "9000" — отдельная подкатегория товаров сама по себе (по указанию пользователя), не
+  // разбирается больше по подкатегории справочника (Наушники/Адаптеры внутри "9000" раньше
+  // определяли итоговую подкатегорию — теперь неважно, что там в подкатегории, весь "9000"
+  // идёт в одну подкатегорию "9000", видимую везде наравне с Наушники/Зарядки/USB/
+  // Беспроводные наушники/Адаптеры).
+  if (cat === "9000") return { cat: "ТОВАРЫ", goodsSub: "9000" };
   return { cat: "ТОВАРЫ", goodsSub: "Другие" };
 }
 
@@ -1344,12 +1360,32 @@ function renderReport(rec){
   content.innerHTML = "";
   const pointsWithData = POINTS.filter(p=>rec.points[p]);
 
+  // Переключатель "Общая / точка" — кнопки-таблетки сверху. Все карточки (сеть + каждая
+  // точка) рендерятся сразу, как и раньше, но показывается только одна за раз (через
+  // display:none/block по data-view) — так графики Chart.js создаются один раз при
+  // построении отчёта и не пересоздаются при переключении, только показываются/скрываются.
+  const switcher = document.createElement("div");
+  switcher.className = "point-switcher";
+  switcher.innerHTML = [`<button type="button" data-view="network" class="active">Общая</button>`]
+    .concat(pointsWithData.map(p=>`<button type="button" data-view="point-${p}">${p}</button>`)).join("");
+  content.appendChild(switcher);
+  function showView(view){
+    switcher.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b.dataset.view===view));
+    content.querySelectorAll(".report-view").forEach(el=>{
+      el.style.display = el.dataset.view===view ? "block" : "none";
+    });
+  }
+  switcher.querySelectorAll("button").forEach(b=>{
+    b.addEventListener("click", ()=>showView(b.dataset.view));
+  });
+
   const networkCard = document.createElement("div");
-  networkCard.className = "card";
+  networkCard.className = "card report-view";
+  networkCard.dataset.view = "network";
   networkCard.innerHTML = `<h2>Сеть в целом — ${rec.monthLabel}</h2>
+    <div class="stat-grid" id="net-stat-grid"></div>
     <h3>Прибыль и продажи по категориям</h3>
     <div class="chart-wrap" style="height:360px;"><canvas id="net-combined-chart"></canvas></div>
-    <p class="muted" id="net-total-summary" style="margin:10px 0;"></p>
     <table>
       <tr><th>Категория</th><th>Прибыль, ₸</th><th>Шт / Сумма, ₸</th><th>Процент по шт</th></tr>
       <tbody id="net-summary-tbody"></tbody>
@@ -1368,7 +1404,11 @@ function renderReport(rec){
   const netGrandProfit = netGlassTotal.profit + netCaseTotal.profit + netGoodsTotal.profit;
   const netGrandSum = netGlassTotal.sum + netCaseTotal.sum + netGoodsTotal.sum;
 
-  networkCard.querySelector("#net-total-summary").textContent = `Общая прибыль по сети: ${fmt(netGrandProfit)} ₸ — всего продано ${fmtQtySum(netGrandQty, netGrandSum)}`;
+  networkCard.querySelector("#net-stat-grid").innerHTML = [
+    ["Прибыль по сети", fmt(netGrandProfit) + " ₸"],
+    ["Продано", fmt(netGrandQty) + " шт"],
+    ["Сумма", fmt(netGrandSum) + " ₸"],
+  ].map(([label,val])=>`<div class="stat-card"><p class="stat-label">${label}</p><p class="stat-value">${val}</p></div>`).join("");
   networkCard.querySelector("#net-summary-tbody").innerHTML = [
     ["Стекло", netGlassTotal], ["Чехлы", netCaseTotal], ["Товары", netGoodsTotal],
   ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty, t.sum)}</td><td class="num">${netGrandQty ? (t.qty/netGrandQty*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
@@ -1395,10 +1435,14 @@ function renderReport(rec){
     const chartId = `point-chart-${i}`;
     const detailId = `point-detail-${i}`;
     const card = document.createElement("div");
-    card.className = "card point-section";
+    card.className = "card point-section report-view";
+    card.dataset.view = `point-${p}`;
+    card.style.display = "none";
     card.innerHTML = `
       <h3 class="point-title">${p}</h3>
-      <p class="muted" style="margin:10px 0;">Прибыль по ${p}: ${fmt(grandProfit)} ₸ — всего продано ${fmtQtySum(grandQty, grandSum)}</p>
+      <div class="stat-grid">
+        ${[["Прибыль", fmt(grandProfit)+" ₸"],["Продано", fmt(grandQty)+" шт"],["Сумма", fmt(grandSum)+" ₸"]].map(([label,val])=>`<div class="stat-card"><p class="stat-label">${label}</p><p class="stat-value">${val}</p></div>`).join("")}
+      </div>
       <div class="grid2">
         <div>
           <table>
