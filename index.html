@@ -1581,6 +1581,15 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
   const grandSumForPct = glassTotal.sum + caseTotal.sum + goodsTotal.sum;
   const pctProfit = v => grandProfitForPct ? ` (${(v/grandProfitForPct*100).toFixed(1)}%)` : "";
   const pctSum = v => grandSumForPct ? ` (${(v/grandSumForPct*100).toFixed(1)}%)` : "";
+  // Единый масштаб для обеих осей: раньше "Прибыль" (y) и "Сумма" (y1) были независимыми
+  // осями и Chart.js растягивал каждую под свой максимум — из-за этого столбец суммы
+  // выглядел визуально той же высоты, что и столбец прибыли, даже если сумма в разы больше.
+  // По указанию пользователя нужно ВИДЕТЬ, что сумма продаж больше прибыли — для этого обеим
+  // осям задаётся один и тот же максимум (наибольшее из трёх столбцов прибыли и трёх
+  // столбцов суммы, с запасом 10%), тогда высота столбцов сравнима напрямую.
+  const maxProfitCol = Math.max(glassTotal.profit, caseTotal.profit, goodsTotal.profit, 0);
+  const maxSumCol = Math.max(glassTotal.sum, caseTotal.sum, goodsTotal.sum, 0);
+  const sharedAxisMax = Math.max(maxProfitCol, maxSumCol) * 1.1 || 1;
 
   return new Chart(ctx, {
     type:"bar",
@@ -1611,8 +1620,8 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
       },
       scales:{
         x:{ stacked:true, ticks:{font:{size:11}} },
-        y:{ stacked:true, position:"left", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Прибыль, ₸"} },
-        y1:{ stacked:true, position:"right", ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Сумма, ₸"} },
+        y:{ stacked:true, position:"left", min:0, max: sharedAxisMax, ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Прибыль, ₸"} },
+        y1:{ stacked:true, position:"right", min:0, max: sharedAxisMax, ticks:{display:false}, grid:{display:false}, title:{display:true, text:"Сумма, ₸"} },
       }
     }
   });
