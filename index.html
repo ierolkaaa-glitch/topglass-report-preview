@@ -452,8 +452,41 @@ const GLASS_SUBCAT_COLORS = {
 const CASE_COLOR = "#8B4513";
 const GOODS_COLOR = "#264478";
 // Подкатегории "Товаров" (всё, что не стекло и не чехлы) — только для отчёта за месяц.
+// Это РЕАЛЬНЫЕ подкатегории, в них классифицируется каждый товар (classifyGoods) — этот
+// список не меняется. Отображение (группировка "Зарядки"+USB+"Адаптеры" в одну строку/
+// сегмент "Зарядки") — отдельный, чисто визуальный слой поверх этих данных, см.
+// GOODS_DISPLAY_GROUPS/groupGoodsForDisplay ниже.
 const GOODS_SUBCATS = ["Наушники","Беспроводные наушники","Зарядки","USB","Адаптеры","9000","Другие"];
 const GOODS_SUBCAT_COLORS = { "Наушники":"#FF66CC", "Беспроводные наушники":"#C00080", "Зарядки":"#264478", "USB":"#00B0F0", "Адаптеры":"#92D050", "9000":"#7F6000", "Другие":"#A6A6A6" };
+
+// По указанию пользователя, во вкладке "Отчёт за месяц" (таблицы, детальная "Подробнее",
+// графики, экспорт в Excel) подкатегории "Зарядки"/USB/"Адаптеры" схлопываются в одну
+// видимую строку/сегмент "Зарядки" (сумма всех трёх), с возможностью развернуть и увидеть
+// исходные три подкатегории по отдельности. Наушники/Беспроводные наушники/9000/Другие не
+// группируются — показываются как есть. Вкладка "Инсайты" НЕ затронута — там используется
+// GOODS_SUBCATS напрямую, без этой группировки, фильтр там остаётся с 3 отдельными опциями.
+const GOODS_DISPLAY_GROUPS = { "Зарядки": ["Зарядки","USB","Адаптеры"] };
+// Порядок отображаемых строк/сегментов товаров в отчёте: реальные подкатегории, КРОМЕ тех,
+// что входят в объединённую группу (они заменяются одной строкой "Зарядки" на своём месте).
+const GOODS_DISPLAY_ORDER = ["Наушники","Беспроводные наушники","Зарядки","9000","Другие"];
+// Сворачивает {qty,profit,sum} по каждой РЕАЛЬНОЙ подкатегории (goodsBySub, результат
+// aggregateGoodsBySubtype) в объект по ОТОБРАЖАЕМЫМ группам — для группы "Зарядки" сюда же
+// кладётся поле _parts со вкладом каждой исходной подкатегории (для разворота по кнопке).
+function groupGoodsForDisplay(goodsBySub){
+  const out = {};
+  GOODS_DISPLAY_ORDER.forEach(displayCat=>{
+    const members = GOODS_DISPLAY_GROUPS[displayCat] || [displayCat];
+    const t = {qty:0, profit:0, sum:0};
+    const parts = {};
+    members.forEach(m=>{
+      const v = goodsBySub[m] || {qty:0,profit:0,sum:0};
+      t.qty += v.qty; t.profit += v.profit; t.sum += (v.sum||0);
+      if (members.length > 1) parts[m] = v;
+    });
+    out[displayCat] = members.length > 1 ? {...t, _parts: parts} : t;
+  });
+  return out;
+}
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
 
@@ -586,12 +619,19 @@ function mapCatalogEntryToCategory(name, category, subcat){
   // а эти товары находятся по штрихкоду, поэтому до неё очередь не доходила). Обнаружено
   // пользователем: категория "Адаптеры" пропала из отчёта, т.к. её товары есть в справочнике.
   if (cat === "АДАПТЕР") return { cat: "ТОВАРЫ", goodsSub: "Адаптеры" };
-  // "9000" — отдельная подкатегория товаров сама по себе (по указанию пользователя), не
-  // разбирается больше по подкатегории справочника (Наушники/Адаптеры внутри "9000" раньше
-  // определяли итоговую подкатегорию — теперь неважно, что там в подкатегории, весь "9000"
-  // идёт в одну подкатегорию "9000", видимую везде наравне с Наушники/Зарядки/USB/
-  // Беспроводные наушники/Адаптеры).
-  if (cat === "9000") return { cat: "ТОВАРЫ", goodsSub: "9000" };
+  // "9000" — ОСНОВНАЯ категория верхнего уровня в справочнике (проверяем именно cat, а не
+  // sub — если у товара другая основная категория, а в подкатегории случайно записано слово
+  // "9000", это правило не должно срабатывать вообще, такой товар обрабатывается по своей
+  // обычной основной категории). По уточнённому указанию пользователя: внутри основной
+  // категории "9000" три конкретные подкатегории справочника (Адаптеры/Беспроводные наушники/
+  // Наушники) снова разбираются по отдельности — как было до предыдущего изменения — а любая
+  // другая подкатегория (пустая, незнакомая и т.д.) по-прежнему идёт в общую "9000".
+  if (cat === "9000"){
+    if (sub === "Адаптеры") return { cat: "ТОВАРЫ", goodsSub: "Адаптеры" };
+    if (sub === "Беспроводные наушники") return { cat: "ТОВАРЫ", goodsSub: "Беспроводные наушники" };
+    if (sub === "Наушники") return { cat: "ТОВАРЫ", goodsSub: "Наушники" };
+    return { cat: "ТОВАРЫ", goodsSub: "9000" };
+  }
   return { cat: "ТОВАРЫ", goodsSub: "Другие" };
 }
 
@@ -600,10 +640,16 @@ function buildCatalogIndex(rows){
   const byName = new Map();
   for (const row of rows){
     const mapped = mapCatalogEntryToCategory(row.name, row.category, row.subcat);
+    // Наценка за единицу товара (Продажная цена − Закупочная цена), если справочник её
+    // содержит — используется только форматом "Отчёт продажи по продавцам", где в самом
+    // файле продаж нет готовой колонки "Прибыль" (см. parseSellerReportRows). Для всех
+    // остальных форматов отчётов unitProfit не нужен — там прибыль уже есть в файле продаж.
+    const hasPrices = row.sellPrice !== undefined && row.buyPrice !== undefined;
+    const withProfit = hasPrices ? { ...mapped, unitProfit: row.sellPrice - row.buyPrice } : mapped;
     const barcode = normalizeBarcode(row.barcode);
     const nameKey = normalizeItemName(row.name);
-    if (barcode) byBarcode.set(barcode, mapped);
-    if (nameKey) byName.set(nameKey, mapped);
+    if (barcode) byBarcode.set(barcode, withProfit);
+    if (nameKey) byName.set(nameKey, withProfit);
   }
   return { byBarcode, byName };
 }
@@ -618,6 +664,16 @@ function lookupCatalog(name, barcode){
   const bc = normalizeBarcode(barcode);
   if (bc && catalogByBarcode.has(bc)) return catalogByBarcode.get(bc);
   return null;
+}
+
+// Наценка за единицу (Продажная цена − Закупочная цена) для товара по штрихкоду — только
+// для формата "Отчёт продажи по продавцам" (parseSellerReportRows), где своей колонки
+// "Прибыль" в файле нет. Возвращает undefined, если товара нет в справочнике или справочник
+// не содержит цен (старый файл без колонок "Продажная цена"/"Закупочная цена").
+function lookupUnitProfit(barcode){
+  const bc = normalizeBarcode(barcode);
+  if (!bc || !catalogByBarcode.has(bc)) return undefined;
+  return catalogByBarcode.get(bc).unitProfit;
 }
 
 function classify(name, barcode, unitPrice){
@@ -755,11 +811,107 @@ function findTableLayout(rows){
   return null;
 }
 
+// Формат "Отчёт продажи по продавцам" (выгрузка кассы за 2026-09 — см. файл "Отчет продажи
+// по продавцам за ..."): в отличие от остальных форматов, здесь НЕТ одной строки на товар с
+// готовыми итогами "Кол-во"/"Прибыль" — вместо этого КАЖДАЯ строка это одна продажа одним
+// продавцом в конкретный день (колонки Магазин/Дата/Продавец/Наименование/Артикул/Баркод/
+// Категория/Кол-во проданных/Кол-во возвращенных/Продано за вычетом возвратов/Продажи без
+// учета скидки/Свободная цена/Оптовая цена). Прибыли в файле нет вообще — она считается по
+// справочнику товаров (Продажная цена − Закупочная цена) × кол-во, см. lookupUnitProfit.
+// Отличаем этот формат от остальных по характерному набору заголовков (Магазин+Продавец+
+// "продано за вычетом возвратов"), проверяем только первую строку — эта выгрузка всегда
+// начинается с шапки без служебных строк сверху.
+const SELLER_REPORT_HEADERS = {
+  store: ["магазин"],
+  name: ["наименование"],
+  barcode: ["баркод"],
+  // "Кол-во проданных" — ВАЛОВОЕ кол-во (до вычета возвратов), нужно вместе с "Продажи без
+  // учета скидки" (тоже валовая сумма) только чтобы вычислить цену за единицу и по ней
+  // пересчитать сумму на ЧИСТОЕ кол-во — см. комментарий в parseSellerReportRows ниже.
+  qtyGross: ["кол-во проданных"],
+  qtyNet: ["продано за вычетом возвратов"],
+  sumGross: ["продажи без учета скидки"],
+};
+function findSellerReportLayout(rows){
+  const row = rows[0];
+  if (!row) return null;
+  let storeCol=-1, nameCol=-1, barcodeCol=-1, qtyGrossCol=-1, qtyCol=-1, sumCol=-1;
+  for (let c = 0; c < row.length; c++){
+    const cell = row[c];
+    if (typeof cell !== "string") continue;
+    const v = cell.trim().toLowerCase();
+    if (storeCol===-1 && SELLER_REPORT_HEADERS.store.includes(v)) storeCol = c;
+    if (nameCol===-1 && SELLER_REPORT_HEADERS.name.includes(v)) nameCol = c;
+    if (barcodeCol===-1 && SELLER_REPORT_HEADERS.barcode.includes(v)) barcodeCol = c;
+    if (qtyGrossCol===-1 && SELLER_REPORT_HEADERS.qtyGross.includes(v)) qtyGrossCol = c;
+    if (qtyCol===-1 && SELLER_REPORT_HEADERS.qtyNet.includes(v)) qtyCol = c;
+    if (sumCol===-1 && SELLER_REPORT_HEADERS.sumGross.includes(v)) sumCol = c;
+  }
+  if (storeCol===-1 || nameCol===-1 || qtyCol===-1 || sumCol===-1) return null;
+  return { headerRow: 0, storeCol, nameCol, barcodeCol, qtyGrossCol, qtyCol, sumCol };
+}
+
+// Построчные продажи (одна строка = одна продажа одним продавцом) сворачиваются в одну
+// запись на товар (по штрихкоду, если он есть, иначе по названию) — так же, как остальные
+// форматы отдают уже готовую агрегированную строку на товар. Возвращает {items, store}, где
+// store — значение колонки "Магазин" первой строки (для проверки, что в файле один магазин).
+function parseSellerReportRows(allRows, layout){
+  const byKey = new Map(); // key -> {name, barcode, qty, sum}
+  let store = null;
+  for (let r = layout.headerRow + 1; r < allRows.length; r++){
+    const row = allRows[r];
+    if (!row) continue;
+    const name = row[layout.nameCol];
+    if (!name || typeof name !== "string") continue;
+    if (isExcludedItem(name)) continue;
+    if (store === null && row[layout.storeCol]) store = String(row[layout.storeCol]).trim();
+    const barcode = layout.barcodeCol !== -1 ? normalizeBarcode(row[layout.barcodeCol]) : "";
+    const qty = toNum(row[layout.qtyCol]);
+    // "Продажи без учета скидки" — ВАЛОВАЯ сумма (кол-во ДО вычета возвратов × цена), а не
+    // чистая. Если строку что-то вернули (qty проданных > qty за вычетом возвратов), валовая
+    // сумма не уменьшается вместе с кол-вом — обнаружено на примере "USB TS-141 C/C" (продано
+    // 1, возврат 1, чистое кол-во 0, но "Продажи без учета скидки" всё равно 1800, а не 0).
+    // Пересчитываем сумму на чистое кол-во через цену за единицу (валовая сумма / валовое
+    // кол-во), чтобы сумма товара корректно шла к нулю вместе с полностью возвращённым кол-вом.
+    const sumGross = toNum(row[layout.sumCol]);
+    const qtyGross = layout.qtyGrossCol !== -1 ? toNum(row[layout.qtyGrossCol]) : qty;
+    const rowUnitPrice = qtyGross ? sumGross / qtyGross : 0;
+    const sum = Math.round(rowUnitPrice * qty);
+    if (qty === 0 && sum === 0) continue;
+    const key = barcode || ("n:" + normalizeItemName(name));
+    if (!byKey.has(key)) byKey.set(key, {name: name.trim(), barcode, qty: 0, sum: 0});
+    const acc = byKey.get(key);
+    acc.qty += qty;
+    acc.sum += sum;
+  }
+  const items = [];
+  for (const {name, barcode, qty, sum} of byKey.values()){
+    const unitProfit = lookupUnitProfit(barcode);
+    // Если товара нет в справочнике цен — прибыль посчитать не из чего, считаем её 0 (не
+    // пропускаем сам товар — кол-во/сумма всё равно валидны и должны попасть в отчёт).
+    const profit = unitProfit !== undefined ? Math.round(unitProfit * qty) : 0;
+    const unitPrice = qty ? Math.round(sum / qty) : undefined;
+    items.push({name, qty, sum, profit, barcode, cat: classify(name, barcode, unitPrice)});
+  }
+  return { items, store };
+}
+
 async function parseXlsxFile(file){
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:"array"});
   const ws = wb.Sheets["Sheet1"] || wb.Sheets["data"] || wb.Sheets[wb.SheetNames[0]];
   const allRows = XLSX.utils.sheet_to_json(ws, {header:1, range:0, defval:null});
+  const sellerLayout = findSellerReportLayout(allRows);
+  if (sellerLayout){
+    const { items, store } = parseSellerReportRows(allRows, sellerLayout);
+    const periodMonth = extractPeriodMonth(allRows);
+    // Имя файла этого формата ("Отчет продажи по продавцам за ...") не содержит название
+    // точки — detectPoint(имя файла) в addFiles() тут ничего не найдёт, поэтому дополнительно
+    // возвращаем точку, определённую по колонке "Магазин" внутри самого файла (например
+    // "TopGlass Вокзал" содержит токен "ВОКЗ"), чтобы addFiles могла подставить её сама.
+    const detectedPoint = store ? detectPoint(store) : null;
+    return { items, periodMonth, detectedPoint };
+  }
   const layout = findTableLayout(allRows);
   if (!layout){
     throw new Error("Не удалось распознать структуру файла — не найдены колонки «Товар», «Кол-во» и «Прибыль»");
@@ -1045,6 +1197,12 @@ function updateCatalogSummary(rowCount){
 
 // Парсит xlsx-справочник (лист "data", колонки: Название товара, Категория, Подкатеогрия,
 // Штрихкод — как в файле Наименование-Категория.xlsx) в массив {name, category, subcat, barcode}.
+// С сентября 2026 справочник дополнительно содержит "Продажная цена" и "Закупочная цена"
+// (цена за единицу товара) — если эти колонки есть, читаем их тоже (sellPrice/buyPrice), это
+// нужно для расчёта прибыли в формате "Отчёт продажи по продавцам" (см. parseSellerReportRows),
+// где готовой колонки "Прибыль" нет в принципе, только кол-во и сумма продаж. Колонки не
+// обязательны — старые файлы справочника без цен по-прежнему читаются нормально (sellPrice/
+// buyPrice будут undefined).
 async function parseCatalogXlsxFile(file){
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:"array"});
@@ -1058,6 +1216,8 @@ async function parseCatalogXlsxFile(file){
   const catCol = header.findIndex(v => v === "категория" || v.includes("категория") && !v.includes("под"));
   const subcatCol = header.findIndex(v => v.includes("подкат"));
   const barcodeCol = header.findIndex(v => v.includes("штрихкод") && !v.includes("доп"));
+  const sellPriceCol = header.findIndex(v => v.includes("продажная цена"));
+  const buyPriceCol = header.findIndex(v => v.includes("закупочная цена"));
   if (nameCol === -1 || catCol === -1){
     throw new Error("Не удалось распознать структуру файла — не найдены колонки «Название товара» и «Категория»");
   }
@@ -1072,6 +1232,8 @@ async function parseCatalogXlsxFile(file){
       category: catCol !== -1 ? (row[catCol] || "") : "",
       subcat: subcatCol !== -1 ? (row[subcatCol] || "") : "",
       barcode: barcodeCol !== -1 ? normalizeBarcode(row[barcodeCol]) : "",
+      sellPrice: sellPriceCol !== -1 ? toNum(row[sellPriceCol]) : undefined,
+      buyPrice: buyPriceCol !== -1 ? toNum(row[buyPriceCol]) : undefined,
     });
   }
   return rows;
@@ -1141,6 +1303,10 @@ async function addFiles(files){
       const parsed = await parseXlsxFile(entry.file);
       entry.items = parsed.items;
       entry.detectedMonth = parsed.periodMonth || detectMonthFromFilename(entry.file.name);
+      // Точка по имени файла не определилась (формат "Отчёт продажи по продавцам" не содержит
+      // названия точки в имени) — пробуем точку, которую parseXlsxFile определил по колонке
+      // "Магазин" внутри самого файла (см. detectedPoint в parseSellerReportRows-ветке).
+      if (!entry.point && parsed.detectedPoint) entry.point = parsed.detectedPoint;
       entry.status = "pending";
     }catch(e){
       entry.status = "err";
@@ -1328,14 +1494,32 @@ function fmtQtySum(qty, sum){
 // пользователя главной метрикой сравнения теперь сумма продаж, а не количество штук
 // (количество по-прежнему показывается в ячейке "Шт / Сумма, ₸", просто больше не участвует
 // в проценте). Вкладка "Инсайты" не затронута — там сравнение по-прежнему по количеству.
-function buildDetailPanelHtml(glassBySub, goodsBySub, grandTotal){
+// idPrefix — уникальный на странице префикс (например "net" или "point-2"), нужен, чтобы
+// id строки-разворота группы "Зарядки" (USB/Зарядки/Адаптеры) не совпадал между карточкой
+// сети и карточками разных точек, отрендеренными на одной странице одновременно.
+function buildDetailPanelHtml(glassBySub, goodsBySub, grandTotal, idPrefix){
   const pctOf = (num, den)=> den ? `${(num/den*100).toFixed(1)}%` : "0.0%";
   const glassRows = GLASS_SUBCATS.filter(c=>glassBySub[c] && (glassBySub[c].qty || glassBySub[c].profit || glassBySub[c].sum))
     .sort((a,b)=>glassBySub[b].profit-glassBySub[a].profit)
     .map(c=>`<tr><td><span class="dot" style="background:${GLASS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(glassBySub[c].profit)}</td><td class="num">${pctOf(glassBySub[c].profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(glassBySub[c].qty, glassBySub[c].sum)}</td><td class="num">${pctOf(glassBySub[c].sum, grandTotal.sum)}</td></tr>`).join("");
-  const goodsRows = GOODS_SUBCATS.filter(c=>goodsBySub[c] && (goodsBySub[c].qty || goodsBySub[c].profit || goodsBySub[c].sum))
-    .sort((a,b)=>goodsBySub[b].profit-goodsBySub[a].profit)
-    .map(c=>`<tr><td><span class="dot" style="background:${GOODS_SUBCAT_COLORS[c]}"></span>${c}</td><td class="num">${fmt(goodsBySub[c].profit)}</td><td class="num">${pctOf(goodsBySub[c].profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(goodsBySub[c].qty, goodsBySub[c].sum)}</td><td class="num">${pctOf(goodsBySub[c].sum, grandTotal.sum)}</td></tr>`).join("");
+  // Товары показываются по ОТОБРАЖАЕМЫМ группам (groupGoodsForDisplay) — "Зарядки" здесь уже
+  // сумма USB+Зарядки+Адаптеры. Если у строки есть _parts (это и есть объединённая группа),
+  // рядом с названием добавляется кнопка "Подробнее ▾" — при клике разворачивается ещё одна
+  // маленькая таблица с тремя исходными подкатегориями (тот же механизм toggle-detail, что
+  // используется для основной кнопки "Подробнее" карточки).
+  const goodsDisplay = groupGoodsForDisplay(goodsBySub);
+  const goodsRows = GOODS_DISPLAY_ORDER.filter(c=>goodsDisplay[c] && (goodsDisplay[c].qty || goodsDisplay[c].profit || goodsDisplay[c].sum))
+    .sort((a,b)=>goodsDisplay[b].profit-goodsDisplay[a].profit)
+    .map((c,idx)=>{
+      const t = goodsDisplay[c];
+      const mainRow = `<tr><td><span class="dot" style="background:${GOODS_SUBCAT_COLORS[c]}"></span>${c}${t._parts ? ` <button type="button" class="btn-link toggle-detail" style="padding:2px 0; font-size:11px;" data-target="${idPrefix}-charge-expand-${idx}">Подробнее ▾</button>` : ""}</td><td class="num">${fmt(t.profit)}</td><td class="num">${pctOf(t.profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(t.qty, t.sum)}</td><td class="num">${pctOf(t.sum, grandTotal.sum)}</td></tr>`;
+      if (!t._parts) return mainRow;
+      const partRows = Object.entries(t._parts)
+        .filter(([,v])=>v.qty||v.profit||v.sum)
+        .sort((a,b)=>b[1].profit-a[1].profit)
+        .map(([name,v])=>`<tr><td style="padding-left:22px; color:var(--muted);">— ${name}</td><td class="num">${fmt(v.profit)}</td><td class="num">${pctOf(v.profit, grandTotal.profit)}</td><td class="num">${fmtQtySum(v.qty, v.sum)}</td><td class="num">${pctOf(v.sum, grandTotal.sum)}</td></tr>`).join("");
+      return mainRow + `<tr id="${idPrefix}-charge-expand-${idx}" style="display:none;"><td colspan=5 style="padding:0;"><table style="margin:0;">${partRows}</table></td></tr>`;
+    }).join("");
   return `
     <div class="grid2">
       <div>
@@ -1353,7 +1537,11 @@ function wireDetailToggle(scopeEl){
     btn.addEventListener("click", ()=>{
       const target = document.getElementById(btn.dataset.target);
       const willShow = target.style.display === "none";
-      target.style.display = willShow ? "block" : "none";
+      // target может быть как <tr> строки-разворота "Зарядки" (нужен display:"table-row",
+      // иначе display:"block" ломает табличную раскладку и "сдвигает" соседние таблицы), так
+      // и обычным <div> основной панели "Подробнее" сети/точки (там нужен display:"block").
+      const isRow = target.tagName === "TR";
+      target.style.display = willShow ? (isRow ? "table-row" : "block") : "none";
       btn.textContent = willShow ? "Скрыть ▴" : "Подробнее ▾";
     });
   });
@@ -1416,7 +1604,7 @@ function renderReport(rec){
   networkCard.querySelector("#net-summary-tbody").innerHTML = [
     ["Стекло", netGlassTotal], ["Чехлы", netCaseTotal], ["Товары", netGoodsTotal],
   ].map(([label, t])=>`<tr><td>${label}</td><td class="num">${fmt(t.profit)}</td><td class="num">${fmtQtySum(t.qty, t.sum)}</td><td class="num">${netGrandSum ? (t.sum/netGrandSum*100).toFixed(1) : "0.0"}%</td></tr>`).join("");
-  networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub, {profit: netGrandProfit, qty: netGrandQty, sum: netGrandSum});
+  networkCard.querySelector("#net-detail").innerHTML = buildDetailPanelHtml(netGlassBySub, netGoodsBySub, {profit: netGrandProfit, qty: netGrandQty, sum: netGrandSum}, "net");
   wireDetailToggle(networkCard);
 
   reportCharts.push(makeCombinedNetChart("net-combined-chart", netGlassBySub, netCaseTotal, netGoodsBySub));
@@ -1458,7 +1646,7 @@ function renderReport(rec){
         </div>
         <div class="chart-wrap"><canvas id="${chartId}"></canvas></div>
       </div>
-      <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub, {profit: grandProfit, qty: grandQty, sum: grandSum})}</div>
+      <div class="detail-panel" id="${detailId}" style="display:none;">${buildDetailPanelHtml(glassBySub, goodsBySub, {profit: grandProfit, qty: grandQty, sum: grandSum}, `point-${i}`)}</div>
       <div class="goods-section point-section">
         <h3 class="point-title">Товары (без стекла и чехлов) — лучшие по прибыли</h3>
         <div class="grid3">
@@ -1566,8 +1754,13 @@ function makeCombinedNetChart(canvasId, glassBySub, caseTotal, goodsBySub, showT
   });
   datasets.push({ label:"Чехлы (₸)", data:[0, caseTotal.profit, 0], backgroundColor:CASE_COLOR, stack:"profit", yAxisID:"y" });
   datasets.push({ label:"Чехлы (сумма)", data:[0, caseTotal.sum, 0], backgroundColor:CASE_COLOR, stack:"sum", yAxisID:"y1", qtyValues:[0, caseTotal.qty, 0] });
-  GOODS_SUBCATS.forEach(c=>{
-    const v = goodsBySub[c] || {qty:0,profit:0,sum:0};
+  // Товары — по ОТОБРАЖАЕМЫМ группам (groupGoodsForDisplay): USB/Зарядки/Адаптеры показаны
+  // на графике одним сегментом "Зарядки" (по указанию пользователя), разбивку на исходные
+  // три подкатегории можно посмотреть в таблице "Подробнее" под графиком (там же, где эта
+  // группировка тоже применена — buildDetailPanelHtml).
+  const goodsDisplay = groupGoodsForDisplay(goodsBySub);
+  GOODS_DISPLAY_ORDER.forEach(c=>{
+    const v = goodsDisplay[c] || {qty:0,profit:0,sum:0};
     datasets.push({ label:`${c} (₸)`, data:[0,0,v.profit], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"profit", yAxisID:"y" });
     datasets.push({ label:`${c} (сумма)`, data:[0,0,v.sum], backgroundColor:GOODS_SUBCAT_COLORS[c], stack:"sum", yAxisID:"y1", qtyValues:[0,0,v.qty] });
   });
@@ -1670,8 +1863,18 @@ async function exportReportExcel(){
     .forEach(c=>wsSummary.addRow([c, netGlassBySub[c].qty, netGlassBySub[c].profit]));
   wsSummary.addRow([]);
   wsSummary.addRow(["ТОВАРЫ ПО КАТЕГОРИЯМ"]); wsSummary.addRow(["Категория","Шт","Прибыль, ₸"]);
-  GOODS_SUBCATS.filter(c=>netGoodsBySub[c] && (netGoodsBySub[c].qty||netGoodsBySub[c].profit)).sort((a,b)=>netGoodsBySub[b].profit-netGoodsBySub[a].profit)
-    .forEach(c=>wsSummary.addRow([c, netGoodsBySub[c].qty, netGoodsBySub[c].profit]));
+  // Excel — статичный файл (без кнопок разворота, в отличие от сайта), поэтому объединённая
+  // группа "Зарядки" (USB+Зарядки+Адаптеры) сразу показывается вместе с тремя исходными
+  // подкатегориями с отступом строкой ниже — так видно и общую сумму, и разбивку.
+  {
+    const netGoodsDisplay = groupGoodsForDisplay(netGoodsBySub);
+    GOODS_DISPLAY_ORDER.filter(c=>netGoodsDisplay[c] && (netGoodsDisplay[c].qty||netGoodsDisplay[c].profit)).sort((a,b)=>netGoodsDisplay[b].profit-netGoodsDisplay[a].profit)
+      .forEach(c=>{
+        const t = netGoodsDisplay[c];
+        wsSummary.addRow([c, t.qty, t.profit]);
+        if (t._parts) Object.entries(t._parts).filter(([,v])=>v.qty||v.profit).sort((a,b)=>b[1].profit-a[1].profit).forEach(([name,v])=>wsSummary.addRow(["  — "+name, v.qty, v.profit]));
+      });
+  }
   // reportCharts[0] = совмещённый график прибыли и штук по сети
   addChartImageToSheet(wb, wsSummary, reportCharts[0], 4, 0);
 
@@ -1698,8 +1901,15 @@ async function exportReportExcel(){
       .forEach(c=>ws.addRow([c, glassBySub[c].qty, glassBySub[c].profit]));
     ws.addRow([]);
     ws.addRow(["ТОВАРЫ ПО КАТЕГОРИЯМ"]); ws.addRow(["Категория","Шт","Прибыль, ₸"]);
-    GOODS_SUBCATS.filter(c=>goodsBySub[c] && (goodsBySub[c].qty||goodsBySub[c].profit)).sort((a,b)=>goodsBySub[b].profit-goodsBySub[a].profit)
-      .forEach(c=>ws.addRow([c, goodsBySub[c].qty, goodsBySub[c].profit]));
+    {
+      const goodsDisplay = groupGoodsForDisplay(goodsBySub);
+      GOODS_DISPLAY_ORDER.filter(c=>goodsDisplay[c] && (goodsDisplay[c].qty||goodsDisplay[c].profit)).sort((a,b)=>goodsDisplay[b].profit-goodsDisplay[a].profit)
+        .forEach(c=>{
+          const t = goodsDisplay[c];
+          ws.addRow([c, t.qty, t.profit]);
+          if (t._parts) Object.entries(t._parts).filter(([,v])=>v.qty||v.profit).sort((a,b)=>b[1].profit-a[1].profit).forEach(([name,v])=>ws.addRow(["  — "+name, v.qty, v.profit]));
+        });
+    }
     ws.addRow([]);
     ws.addRow(["ТОВАРЫ — ТОП-5 ПО КОЛИЧЕСТВУ"]); ws.addRow(["#","Товар","Шт"]);
     top5Qty.forEach((r,idx)=>ws.addRow([idx+1, r.name, r.qty]));
