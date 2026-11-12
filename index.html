@@ -422,7 +422,7 @@ if (typeof XLSX === "undefined") showFatalError("библиотека XLSX не 
 if (typeof Chart === "undefined") showFatalError("библиотека Chart не загрузилась");
 if (typeof firebase === "undefined") showFatalError("библиотека Firebase не загрузилась — проверьте интернет-соединение");
 
-const POINTS = ["ЖГ","КС","АЦ","ШР","ХБК","ВОКЗ/ЖД","ХРОМ","ОРАЛ"];
+const POINTS = ["ЖГ","КС","АЦ","ШР","ХБК","ВОКЗ/ЖД","ХРОМ","ОРАЛ","АСТАНА"];
 const CAT_ORDER = ["5D","6D","18D","Приват","Приват по 270","Стекло по 1500/1490","Матовое стекло","Гидрогель","Другое стекло"];
 // Категории, которые считаются "стёклами" для соотношения стёкол/чехлов — все категории
 // стекла КРОМЕ гидрогеля (Skin и линзы на камеры в CAT_ORDER не входят и туда не попадают).
@@ -488,7 +488,7 @@ function groupGoodsForDisplay(goodsBySub){
   return out;
 }
 const RU_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E"];
+const POINT_COLORS = ["#4472C4","#ED7D31","#A5A5A5","#FFC000","#5B9BD5","#70AD47","#264478","#9E480E","#C00000"];
 
 function monthKeyToLabel(key){
   const [y,m] = key.split("-").map(Number);
@@ -738,13 +738,14 @@ function toNum(v){
 
 const POINT_TOKENS = [
   ["ВОКЗ/ЖД", ["ВОКЗ","ЖД"]],
-  ["ЖГ", ["ЖГ"]],
+  ["ЖГ", ["ЖГ","ЖИЛГОРОДОК"]],
   ["КС", ["КС"]],
   ["АЦ", ["АЦ"]],
   ["ШР", ["ШР"]],
   ["ХБК", ["ХБК"]],
   ["ХРОМ", ["ХРОМ"]],
   ["ОРАЛ", ["ОРАЛ"]],
+  ["АСТАНА", ["АСТАНА"]],
 ];
 function detectPoint(filename){
   const upper = filename.toUpperCase();
@@ -901,11 +902,93 @@ function parseSellerReportRows(allRows, layout){
   return { items, store };
 }
 
+// Формат Billz "Все продажи" (выгрузка по транзакциям, с октября 2026): одна строка = одна
+// позиция одной транзакции (Тип транзакции SALE/RETURN/EXCHANGE, Магазин, Наименование
+// товара, Баркод, Кол-во проданных товаров, Кол-во возвращенных товаров, Выручка, Сумма
+// возвратов, Чистая выручка). Прибыли в файле нет — считается по справочнику цен так же, как
+// в формате "по продавцам": (Продажная − Закупочная) × чистое кол-во. Чистое кол-во =
+// проданные − возвращённые (у строк RETURN проданных 0, возвращённых 1 → −1), чистая сумма —
+// готовая колонка "Чистая выручка" (у возвратов уже отрицательная).
+const BILLZ_TX_HEADERS = {
+  type: ["тип транзакции"],
+  store: ["магазин"],
+  name: ["наименование товара"],
+  barcode: ["баркод"],
+  qtySold: ["кол-во проданных товаров"],
+  qtyReturned: ["кол-во возвращенных товаров"],
+  netSum: ["чистая выручка"],
+  date: ["дата"],
+};
+function findBillzTxLayout(rows){
+  const row = rows[0];
+  if (!row) return null;
+  const L = {};
+  for (let c = 0; c < row.length; c++){
+    const cell = row[c];
+    if (typeof cell !== "string") continue;
+    const v = cell.trim().toLowerCase();
+    for (const key of Object.keys(BILLZ_TX_HEADERS)){
+      if (L[key] === undefined && BILLZ_TX_HEADERS[key].includes(v)) L[key] = c;
+    }
+  }
+  if (L.type === undefined || L.name === undefined || L.qtySold === undefined || L.qtyReturned === undefined || L.netSum === undefined) return null;
+  return { headerRow: 0, ...L };
+}
+function billzDateMonth(v){
+  if (v === null || v === undefined || v === "") return null;
+  if (v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,"0")}`;
+  if (typeof v === "number"){
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}`;
+  }
+  const m = String(v).match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : null;
+}
+function parseBillzTxRows(allRows, layout){
+  const byKey = new Map();
+  const months = new Set();
+  let store = null;
+  for (let r = layout.headerRow + 1; r < allRows.length; r++){
+    const row = allRows[r];
+    if (!row) continue;
+    const name = row[layout.name];
+    if (!name || typeof name !== "string") continue;
+    if (isExcludedItem(name)) continue;
+    if (store === null && layout.store !== undefined && row[layout.store]) store = String(row[layout.store]).trim();
+    if (layout.date !== undefined){ const mk = billzDateMonth(row[layout.date]); if (mk) months.add(mk); }
+    const barcode = layout.barcode !== undefined ? normalizeBarcode(row[layout.barcode]) : "";
+    const qty = toNum(row[layout.qtySold]) - toNum(row[layout.qtyReturned]);
+    const sum = toNum(row[layout.netSum]);
+    if (qty === 0 && sum === 0) continue;
+    const key = barcode || ("n:" + normalizeItemName(name));
+    if (!byKey.has(key)) byKey.set(key, {name: name.trim(), barcode, qty: 0, sum: 0});
+    const acc = byKey.get(key);
+    acc.qty += qty;
+    acc.sum += sum;
+  }
+  const items = [];
+  for (const {name, barcode, qty, sum} of byKey.values()){
+    if (qty === 0 && sum === 0) continue;
+    const unitProfit = lookupUnitProfit(barcode);
+    const profit = unitProfit !== undefined ? Math.round(unitProfit * qty) : 0;
+    const unitPrice = qty ? Math.round(sum / qty) : undefined;
+    items.push({name, qty, sum, profit, barcode, cat: classify(name, barcode, unitPrice)});
+  }
+  const periodMonth = months.size === 1 ? [...months][0] : null;
+  return { items, store, periodMonth };
+}
+
 async function parseXlsxFile(file){
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:"array"});
   const ws = wb.Sheets["Sheet1"] || wb.Sheets["data"] || wb.Sheets[wb.SheetNames[0]];
   const allRows = XLSX.utils.sheet_to_json(ws, {header:1, range:0, defval:null});
+  const billzLayout = findBillzTxLayout(allRows);
+  if (billzLayout){
+    const { items, store, periodMonth } = parseBillzTxRows(allRows, billzLayout);
+    const detectedPoint = store ? detectPoint(store) : null;
+    return { items, periodMonth, detectedPoint };
+  }
   const sellerLayout = findSellerReportLayout(allRows);
   if (sellerLayout){
     const { items, store } = parseSellerReportRows(allRows, sellerLayout);
@@ -2128,7 +2211,7 @@ function renderGlassCaseChart(rec){
 // Группа А и Группа Б — фиксированные объединения точек. Точки внутри каждой группы
 // сравниваются между собой (а не группа с группой).
 const POINT_GROUPS = {
-  "Группа А": ["ШР","АЦ","КС","ЖГ"],
+  "Группа А": ["ШР","АЦ","КС","ЖГ","АСТАНА"],
   "Группа Б": ["ХБК","ВОКЗ/ЖД","ОРАЛ","ХРОМ"],
 };
 // Категории для поиска заметных расхождений между точками — своя, более крупная
